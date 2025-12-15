@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { ITEMS, BASE_STATS, ASSETS, SPELLS, SKILLS } from '../constants';
-import { Item, CharacterClass, TerrainType, CreatureType, DamageType, Dimension, Spell, Skill, EnemyDefinition, LootEntry } from '../types';
+import { ITEMS, BASE_STATS, ASSETS, SPELLS, SKILLS, XP_TABLE, RACE_BONUS, CLASS_TREES, DIFFICULTY_SETTINGS, TERRAIN_MOVEMENT_COST, TERRAIN_COLORS } from '../constants';
+import { Item, CharacterClass, TerrainType, CreatureType, DamageType, Dimension, Spell, Skill, EnemyDefinition, LootEntry, ProgressionNode, CharacterRace, Attributes, Difficulty } from '../types';
 import { getSupabase } from '../services/supabaseClient';
 
 interface GameConfig {
@@ -13,7 +13,14 @@ interface ContentState {
     items: Record<string, Item>;
     spells: Record<string, Spell>;
     skills: Record<string, Skill>;
-    classStats: Record<CharacterClass, any>;
+    classStats: Record<CharacterClass, Attributes>;
+    classTrees: Record<CharacterClass, ProgressionNode[]>;
+    raceBonuses: Record<CharacterRace, Partial<Attributes>>;
+    xpTable: Record<number, number>;
+    difficultySettings: Record<Difficulty, { enemyStatMod: number, xpMod: number }>;
+    terrainCosts: Record<TerrainType, number>;
+    terrainColors: Record<TerrainType, string>;
+    
     gameConfig: GameConfig;
     
     // Dynamic Enemy Data
@@ -33,7 +40,7 @@ interface ContentState {
     
     updateEncounterTable: (terrain: TerrainType, enemyIds: string[]) => void;
 
-    updateClassStats: (cls: CharacterClass, stats: any) => void;
+    updateClassStats: (cls: CharacterClass, stats: Attributes) => void;
     updateConfig: (config: Partial<GameConfig>) => void;
     
     // Cloud Sync Actions
@@ -46,7 +53,6 @@ interface ContentState {
 
 // D&D 5e Inspired Bestiary (Hardcoded Fallback)
 const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
-    // ... (Keep existing enemies - abbreviated for response size as logic is identical)
     'goblin_spearman': { 
         id: 'goblin_spearman', name: 'Goblin', type: CreatureType.HUMANOID, sprite: ASSETS.UNITS.GOBLIN, 
         hp: 7, ac: 15, xpReward: 50, damage: 5, initiativeBonus: 2,
@@ -219,6 +225,12 @@ const initialState = {
     spells: { ...SPELLS },
     skills: { ...SKILLS },
     classStats: { ...BASE_STATS },
+    classTrees: { ...CLASS_TREES },
+    raceBonuses: { ...RACE_BONUS },
+    xpTable: { ...XP_TABLE },
+    difficultySettings: { ...DIFFICULTY_SETTINGS },
+    terrainCosts: { ...TERRAIN_MOVEMENT_COST },
+    terrainColors: { ...TERRAIN_COLORS },
     gameConfig: { mapScale: 0.12, moistureOffset: 150, tempOffset: 300 },
     enemies: DEFAULT_ENEMIES,
     encounters: DEFAULT_ENCOUNTERS,
@@ -249,13 +261,43 @@ export const useContentStore = create<ContentState>((set, get) => ({
                 const newEnemies: Record<string, EnemyDefinition> = { ...DEFAULT_ENEMIES };
                 const newSpells: Record<string, Spell> = { ...SPELLS };
                 const newSkills: Record<string, Skill> = { ...SKILLS };
+                const newClassStats: Record<CharacterClass, Attributes> = { ...BASE_STATS };
+                const newClassTrees: Record<CharacterClass, ProgressionNode[]> = { ...CLASS_TREES };
+                const newRaceBonuses: Record<CharacterRace, Partial<Attributes>> = { ...RACE_BONUS };
+                let newXpTable: Record<number, number> = { ...XP_TABLE };
+                let newDifficulty: Record<Difficulty, { enemyStatMod: number, xpMod: number }> = { ...DIFFICULTY_SETTINGS };
+                let newTerrainCosts: Record<TerrainType, number> = { ...TERRAIN_MOVEMENT_COST };
+                let newTerrainColors: Record<TerrainType, string> = { ...TERRAIN_COLORS };
+
                 data.forEach((row: any) => {
                     if (row.category === 'ITEM') newItems[row.id] = row.data;
                     if (row.category === 'ENEMY') newEnemies[row.id] = row.data;
                     if (row.category === 'SPELL') newSpells[row.id] = row.data;
                     if (row.category === 'SKILL') newSkills[row.id] = row.data;
+                    if (row.category === 'CLASS_STATS') newClassStats[row.id as CharacterClass] = row.data;
+                    if (row.category === 'CLASS_TREE') newClassTrees[row.id as CharacterClass] = row.data;
+                    if (row.category === 'RACE_BONUS') newRaceBonuses[row.id as CharacterRace] = row.data;
+                    if (row.category === 'CONFIG') {
+                        if (row.id === 'xp_table') newXpTable = row.data;
+                        if (row.id === 'difficulty_settings') newDifficulty = row.data;
+                        if (row.id === 'terrain_costs') newTerrainCosts = row.data;
+                        if (row.id === 'terrain_colors') newTerrainColors = row.data;
+                    }
                 });
-                set({ items: newItems, enemies: newEnemies, spells: newSpells, skills: newSkills, isLoading: false });
+                set({ 
+                    items: newItems, 
+                    enemies: newEnemies, 
+                    spells: newSpells, 
+                    skills: newSkills, 
+                    classStats: newClassStats,
+                    classTrees: newClassTrees,
+                    raceBonuses: newRaceBonuses,
+                    xpTable: newXpTable,
+                    difficultySettings: newDifficulty,
+                    terrainCosts: newTerrainCosts,
+                    terrainColors: newTerrainColors,
+                    isLoading: false 
+                });
                 console.log("Content synced from Supabase.");
             }
         } catch (e) {
@@ -268,13 +310,20 @@ export const useContentStore = create<ContentState>((set, get) => ({
         const supabase = getSupabase();
         if (!supabase) { alert("Supabase not configured or available."); return; }
         const state = get();
-        const { items, enemies, spells, skills } = state;
+        const { items, enemies, spells, skills, classStats, classTrees, raceBonuses, xpTable, difficultySettings, terrainCosts, terrainColors } = state;
         set({ isLoading: true });
         const rows = [
             ...Object.values(items).map((i: Item) => ({ id: i.id, category: 'ITEM', data: i })),
             ...Object.values(enemies).map((e: EnemyDefinition) => ({ id: e.id, category: 'ENEMY', data: e })),
             ...Object.values(spells).map((s: Spell) => ({ id: s.id, category: 'SPELL', data: s })),
             ...Object.values(skills).map((s: Skill) => ({ id: s.id, category: 'SKILL', data: s })),
+            ...Object.entries(classStats).map(([id, data]) => ({ id, category: 'CLASS_STATS', data })),
+            ...Object.entries(classTrees).map(([id, data]) => ({ id, category: 'CLASS_TREE', data })),
+            ...Object.entries(raceBonuses).map(([id, data]) => ({ id, category: 'RACE_BONUS', data })),
+            { id: 'xp_table', category: 'CONFIG', data: xpTable },
+            { id: 'difficulty_settings', category: 'CONFIG', data: difficultySettings },
+            { id: 'terrain_costs', category: 'CONFIG', data: terrainCosts },
+            { id: 'terrain_colors', category: 'CONFIG', data: terrainColors },
         ];
         try {
             const { error } = await supabase.from('game_definitions').upsert(rows, { onConflict: 'id' });
@@ -301,6 +350,12 @@ export const useContentStore = create<ContentState>((set, get) => ({
             spells: state.spells,
             skills: state.skills,
             classStats: state.classStats,
+            classTrees: state.classTrees,
+            raceBonuses: state.raceBonuses,
+            xpTable: state.xpTable,
+            difficultySettings: state.difficultySettings,
+            terrainCosts: state.terrainCosts,
+            terrainColors: state.terrainColors,
             gameConfig: state.gameConfig
         }, null, 2);
     }
