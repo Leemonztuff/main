@@ -1,4 +1,3 @@
-
 import React, { useRef, useMemo, useLayoutEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, QuadraticBezierLine, useTexture, Trail, Sparkles } from '@react-three/drei';
@@ -151,7 +150,7 @@ export const SpellEffectsRenderer = React.memo(({ activeSpellEffect }: { activeS
     return (
         <group>
             {activeSpellEffect.type === 'PROJECTILE' && (
-                <group ref={meshRef} position={activeSpellEffect.startPos}>
+                <group ref={meshRef} position={new THREE.Vector3(...activeSpellEffect.startPos)}>
                      {isValidProjectileUrl ? (
                          <TextureErrorBoundary fallback={
                             <mesh>
@@ -183,13 +182,13 @@ export const SpellEffectsRenderer = React.memo(({ activeSpellEffect }: { activeS
 
             {activeSpellEffect.type === 'BEAM' && (
                 <QuadraticBezierLine
-                    start={activeSpellEffect.startPos}
-                    end={activeSpellEffect.endPos}
-                    mid={[
+                    start={new THREE.Vector3(...activeSpellEffect.startPos)}
+                    end={new THREE.Vector3(...activeSpellEffect.endPos)}
+                    mid={new THREE.Vector3(
                         (activeSpellEffect.startPos[0] + activeSpellEffect.endPos[0]) / 2,
                         4, 
                         (activeSpellEffect.startPos[2] + activeSpellEffect.endPos[2]) / 2
-                    ]}
+                    )}
                     color={activeSpellEffect.color}
                     lineWidth={3}
                     dashed={false}
@@ -197,7 +196,7 @@ export const SpellEffectsRenderer = React.memo(({ activeSpellEffect }: { activeS
             )}
 
             {activeSpellEffect.type === 'BREATH' && (
-                <group ref={meshRef} position={activeSpellEffect.startPos}>
+                <group ref={meshRef} position={new THREE.Vector3(...activeSpellEffect.startPos)}>
                     {/* Breath Particles - A simple expanding cone of particles */}
                     <Sparkles 
                         count={50} 
@@ -206,7 +205,7 @@ export const SpellEffectsRenderer = React.memo(({ activeSpellEffect }: { activeS
                         speed={2} 
                         opacity={1 - progressRef.current} 
                         color={activeSpellEffect.color} 
-                        position={[0, 0.5, 1.5]} // Offset forward
+                        position={new THREE.Vector3(0, 0.5, 1.5)} // Offset forward
                         noise={1}
                     />
                     <pointLight color={activeSpellEffect.color} intensity={2} distance={4} position={[0, 0.5, 1]} />
@@ -215,7 +214,7 @@ export const SpellEffectsRenderer = React.memo(({ activeSpellEffect }: { activeS
 
             {/* Thunderwave / Area Burst Effect */}
             {activeSpellEffect.variant === 'BURST' && !animationFrames && (
-                 <group position={activeSpellEffect.endPos}>
+                 <group position={new THREE.Vector3(...activeSpellEffect.endPos)}>
                     <mesh rotation={[-Math.PI/2, 0, 0]}>
                         <ringGeometry args={[progressRef.current * 1, progressRef.current * 3, 32]} />
                         <meshBasicMaterial color={activeSpellEffect.color} transparent opacity={1 - progressRef.current} side={THREE.DoubleSide} />
@@ -226,9 +225,9 @@ export const SpellEffectsRenderer = React.memo(({ activeSpellEffect }: { activeS
 
             {/* Generic Burst or Cure Wounds */}
             {(activeSpellEffect.type === 'BURST' || progressRef.current > 0.8) && (
-                <group position={activeSpellEffect.endPos}>
+                <group position={new THREE.Vector3(...activeSpellEffect.endPos)}>
                     {animationFrames ? (
-                        <group position={[0, 0.5, 0]}>
+                        <group position={new THREE.Vector3(0, 0.5, 0)}>
                             <TextureErrorBoundary fallback={<Sparkles count={20} scale={3} size={4} speed={0.4} opacity={1 - progressRef.current} color={activeSpellEffect.color} />}>
                                 <AnimatedSprite frames={animationFrames} duration={activeSpellEffect.duration} color={activeSpellEffect.color} />
                             </TextureErrorBoundary>
@@ -238,7 +237,7 @@ export const SpellEffectsRenderer = React.memo(({ activeSpellEffect }: { activeS
                     )}
                     
                     {isValidTextureUrl && !animationFrames && (
-                         <group position={[0, 0.5, 0]}>
+                         <group position={new THREE.Vector3(0, 0.5, 0)}>
                              <TextureErrorBoundary fallback={null}>
                                  <HaloEffect url={textureUrl} color={activeSpellEffect.color} />
                              </TextureErrorBoundary>

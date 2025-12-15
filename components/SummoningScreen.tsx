@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GameState, ItemRarity } from '../types';
-import { CLASS_CONFIG, RACE_ICONS, RARITY_COLORS } from '../constants';
+import { CLASS_CONFIG, RACE_ICONS, RARITY_COLORS, getSprite } from '../constants';
 import { sfx } from '../services/SoundSystem';
 import { SummoningService, SummonResult } from '../services/SummoningService';
 
@@ -274,7 +274,14 @@ export const SummoningScreen: React.FC = () => {
                         <div className="absolute inset-0 blur-xl opacity-20 z-0" style={{ backgroundColor: RARITY_COLORS[summonResult.rarity] }} />
                         
                         <div className="relative z-10 w-32 h-32 bg-black rounded-full border-4 border-slate-700 overflow-hidden shadow-inner flex items-center justify-center shrink-0">
-                            <img src={CLASS_CONFIG[summonResult.class].icon} className="w-20 h-20 invert opacity-90" />
+                            <img 
+                                src={CLASS_CONFIG[summonResult.class].icon} 
+                                className="w-20 h-20 opacity-90" 
+                                onError={(e) => { 
+                                    e.currentTarget.onerror = null; 
+                                    e.currentTarget.src = getSprite(summonResult.race, summonResult.class); 
+                                }}
+                            />
                             <div className="absolute bottom-0 right-0 bg-slate-800 p-2 rounded-full border border-slate-600">
                                 <img src={RACE_ICONS[summonResult.race]} className="w-6 h-6 invert" />
                             </div>

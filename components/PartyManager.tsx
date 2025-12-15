@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { GameState, Entity } from '../types';
 import { sfx } from '../services/SoundSystem';
-import { CLASS_CONFIG, NOISE_TEXTURE_URL } from '../constants';
+import { CLASS_CONFIG, NOISE_TEXTURE_URL, getSprite } from '../constants';
 
 interface CharacterCardProps {
     entity: Entity;
@@ -42,8 +42,16 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ entity, onClick, isSelect
                         {entity.name}
                         {isLeader && <span className="ml-2 text-[9px] md:text-[10px] bg-amber-600 text-white px-1.5 py-0.5 rounded uppercase tracking-wider">Leader</span>}
                     </h3>
-                    <div className="text-lg md:text-xl opacity-50 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all">
-                        <img src={classInfo.icon} className="w-5 h-5 md:w-6 md:h-6 invert" />
+                    <div className="text-lg md:text-xl opacity-50 group-hover:opacity-100 transition-all">
+                        <img 
+                            src={classInfo.icon} 
+                            className="w-5 h-5 md:w-6 md:h-6" 
+                            alt={entity.stats.class} 
+                            onError={(e) => { 
+                                e.currentTarget.onerror = null; 
+                                e.currentTarget.src = getSprite(entity.stats.race!, entity.stats.class); 
+                            }}
+                        />
                     </div>
                 </div>
                 

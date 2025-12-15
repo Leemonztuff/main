@@ -261,7 +261,12 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({ onComplete }) => {
                                         <img 
                                             src={CLASS_CONFIG[c].icon} 
                                             alt="" 
-                                            className="w-full h-full object-contain filter invert" 
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => { 
+                                                console.warn(`Failed to load class icon: ${CLASS_CONFIG[c].icon}`);
+                                                e.currentTarget.onerror = null; 
+                                                e.currentTarget.src = getSprite(CharacterRace.HUMAN, c); 
+                                            }}
                                         />
                                     </div>
                                     <span className={`text-[10px] md:text-sm font-bold uppercase tracking-wider text-center ${cls === c ? 'text-amber-100' : 'text-slate-400'}`}>{c}</span>

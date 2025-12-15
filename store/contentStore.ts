@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { ITEMS, BASE_STATS, ASSETS, SPELLS, SKILLS } from '../constants';
 import { Item, CharacterClass, TerrainType, CreatureType, DamageType, Dimension, Spell, Skill, EnemyDefinition, LootEntry } from '../types';
@@ -41,6 +40,8 @@ interface ContentState {
     fetchContentFromCloud: () => Promise<void>;
     publishContentToCloud: () => Promise<void>;
     resetToDefaults: () => void;
+    
+    exportData: () => string;
 }
 
 // D&D 5e Inspired Bestiary (Hardcoded Fallback)
@@ -290,5 +291,17 @@ export const useContentStore = create<ContentState>((set, get) => ({
     resetToDefaults: () => {
         set(initialState);
         localStorage.removeItem('epic_earth_admin_data');
+    },
+
+    exportData: () => {
+        const state = get();
+        return JSON.stringify({
+            items: state.items,
+            enemies: state.enemies,
+            spells: state.spells,
+            skills: state.skills,
+            classStats: state.classStats,
+            gameConfig: state.gameConfig
+        }, null, 2);
     }
 }));

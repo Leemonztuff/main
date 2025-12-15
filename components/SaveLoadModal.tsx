@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { SaveMetadata, CharacterClass } from '../types';
-import { CLASS_CONFIG } from '../constants';
+import { SaveMetadata, CharacterClass, CharacterRace } from '../types';
+import { CLASS_CONFIG, getSprite } from '../constants';
 
 interface SaveLoadModalProps {
     mode: 'save' | 'load';
@@ -103,8 +103,16 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({ mode, onClose }) =
                                 </div>
 
                                 {slot && (
-                                    <div className="text-3xl opacity-20 group-hover:opacity-100 transition-opacity grayscale group-hover:grayscale-0">
-                                        {CLASS_CONFIG[slot.summary.class]?.icon}
+                                    <div className="w-8 h-8 opacity-20 group-hover:opacity-100 transition-opacity">
+                                        <img 
+                                            src={CLASS_CONFIG[slot.summary.class]?.icon} 
+                                            alt={slot.summary.class}
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => { 
+                                                e.currentTarget.onerror = null; 
+                                                e.currentTarget.src = getSprite(CharacterRace.HUMAN, slot.summary.class); 
+                                            }}
+                                        />
                                     </div>
                                 )}
                             </button>

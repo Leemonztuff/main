@@ -2,8 +2,9 @@
 import { TerrainType, CharacterClass, Attributes, CharacterRace, Item, ItemRarity, EquipmentSlot, Spell, SpellType, Ability, Skill, DamageType, ProgressionNode, Difficulty, WeatherType } from './types';
 
 // SWITCH TO JSDELIVR CDN FOR RELIABLE WEB PREVIEW
-export const WESNOTH_BASE_URL = "https://cdn.jsdelivr.net/gh/wesnoth/wesnoth@master/data/core/images";
-export const MC_BASE_URL = "https://cdn.jsdelivr.net/gh/InventivetalentDev/minecraft-assets@1.19.3/assets/minecraft/textures/block";
+export const WESNOTH_BASE_URL = "/assets/wesnoth"; // Changed to local relative path for consistency
+export const MC_BASE_URL = "/assets/minecraft"; // Changed to local relative path
+export const CLASS_ICON_BASE_URL = "/assets/classicon"; // New constant for class icons
 
 export const NOISE_TEXTURE_URL = `data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E`;
 
@@ -140,18 +141,19 @@ export enum ClassArchetype {
     HYBRID = 'HYBRID'
 }
 
+// These paths must match what download_assets.mjs produces in public/assets/classicon/
 export const CLASS_CONFIG: Record<CharacterClass, { icon: string, hex: string, archetype: ClassArchetype }> = {
-    [CharacterClass.FIGHTER]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/swordsman.png`, hex: '#ef4444', archetype: ClassArchetype.MARTIAL },
-    [CharacterClass.RANGER]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/huntsman.png`, hex: '#22c55e', archetype: ClassArchetype.HYBRID },
-    [CharacterClass.WIZARD]: { icon: `${WESNOTH_BASE_URL}/units/human-magi/red-mage.png`, hex: '#3b82f6', archetype: ClassArchetype.CASTER },
-    [CharacterClass.CLERIC]: { icon: `${WESNOTH_BASE_URL}/units/human-magi/white-mage.png`, hex: '#eab308', archetype: ClassArchetype.CASTER },
-    [CharacterClass.ROGUE]: { icon: `${WESNOTH_BASE_URL}/units/human-outlaws/thief.png`, hex: '#a8a29e', archetype: ClassArchetype.MARTIAL },
-    [CharacterClass.BARBARIAN]: { icon: `${WESNOTH_BASE_URL}/units/human-outlaws/thug.png`, hex: '#dc2626', archetype: ClassArchetype.MARTIAL },
-    [CharacterClass.PALADIN]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/paladin.png`, hex: '#f59e0b', archetype: ClassArchetype.HYBRID },
-    [CharacterClass.SORCERER]: { icon: `${WESNOTH_BASE_URL}/units/human-magi/silver-mage.png`, hex: '#db2777', archetype: ClassArchetype.CASTER },
-    [CharacterClass.WARLOCK]: { icon: `${WESNOTH_BASE_URL}/units/human-magi/dark-adept.png`, hex: '#7e22ce', archetype: ClassArchetype.CASTER },
-    [CharacterClass.DRUID]: { icon: `${WESNOTH_BASE_URL}/units/elves-wood/shaman.png`, hex: '#65a30d', archetype: ClassArchetype.CASTER },
-    [CharacterClass.BARD]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/fencer.png`, hex: '#f472b6', archetype: ClassArchetype.CASTER }
+    [CharacterClass.FIGHTER]: { icon: `${CLASS_ICON_BASE_URL}/fighter.png`, hex: '#ef4444', archetype: ClassArchetype.MARTIAL },
+    [CharacterClass.RANGER]: { icon: `${CLASS_ICON_BASE_URL}/ranger.png`, hex: '#22c55e', archetype: ClassArchetype.HYBRID },
+    [CharacterClass.WIZARD]: { icon: `${CLASS_ICON_BASE_URL}/wizard.png`, hex: '#3b82f6', archetype: ClassArchetype.CASTER },
+    [CharacterClass.CLERIC]: { icon: `${CLASS_ICON_BASE_URL}/cleric.png`, hex: '#eab308', archetype: ClassArchetype.CASTER },
+    [CharacterClass.ROGUE]: { icon: `${CLASS_ICON_BASE_URL}/rogue.png`, hex: '#a8a29e', archetype: ClassArchetype.MARTIAL },
+    [CharacterClass.BARBARIAN]: { icon: `${CLASS_ICON_BASE_URL}/barbarian.png`, hex: '#dc2626', archetype: ClassArchetype.MARTIAL },
+    [CharacterClass.PALADIN]: { icon: `${CLASS_ICON_BASE_URL}/paladin.png`, hex: '#f59e0b', archetype: ClassArchetype.HYBRID },
+    [CharacterClass.SORCERER]: { icon: `${CLASS_ICON_BASE_URL}/sorcerer.png`, hex: '#db2777', archetype: ClassArchetype.CASTER },
+    [CharacterClass.WARLOCK]: { icon: `${CLASS_ICON_BASE_URL}/warlock.png`, hex: '#7e22ce', archetype: ClassArchetype.CASTER },
+    [CharacterClass.DRUID]: { icon: `${CLASS_ICON_BASE_URL}/druid.png`, hex: '#65a30d', archetype: ClassArchetype.CASTER },
+    [CharacterClass.BARD]: { icon: `${CLASS_ICON_BASE_URL}/bard.png`, hex: '#f472b6', archetype: ClassArchetype.CASTER }
 };
 
 export const RACE_ICONS: Record<CharacterRace, string> = {
@@ -272,7 +274,7 @@ export const ASSETS = {
             `${WESNOTH_BASE_URL}/terrain/mountains/basic-tile.png`,
             `${WESNOTH_BASE_URL}/terrain/mountains/dry-tile.png`
         ], 
-        [TerrainType.VILLAGE]: `${WESNOTH_BASE_URL}/terrain/village/human-cottage.png`, 
+        [TerrainType.VILLAGE]: `${WESNOTH_BASE_URL}/terrain/village/human-city-tile.png`, // Updated
         [TerrainType.CASTLE]: `${WESNOTH_BASE_URL}/terrain/castle/castle.png`, 
         [TerrainType.RUINS]: `${WESNOTH_BASE_URL}/terrain/castle/ruin.png`, 
         [TerrainType.FUNGUS]: `${WESNOTH_BASE_URL}/terrain/cave/fungus-tile.png`,
