@@ -1,0 +1,82 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Epic Earth: Shards of Eternum</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Lato:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Lato', sans-serif;
+        overflow: hidden;
+        background-color: #0f172a;
+        color: #e2e8f0;
+      }
+      h1, h2, h3, h4, h5, h6 {
+        font-family: 'Cinzel', serif;
+      }
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e293b; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #475569; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #64748b; 
+      }
+
+      /* GLOBAL ANIMATIONS */
+      @keyframes float-damage {
+          0% { opacity: 0; transform: translateY(20px) scale(0.5); }
+          20% { opacity: 1; transform: translateY(0) scale(1.2); }
+          40% { transform: translateY(-5px) scale(1); }
+          80% { opacity: 1; transform: translateY(-30px); }
+          100% { opacity: 0; transform: translateY(-50px); }
+      }
+      @keyframes fall { from { background-position: 0 0; } to { background-position: 50px 200px; } }
+      @keyframes ashFloat { 0% { background-position: 0 0; opacity: 0.4; } 50% { background-position: 20px -50px; opacity: 0.6; } 100% { background-position: 40px -100px; opacity: 0.4; } }
+      @keyframes lightning { 0% { background-color: rgba(220, 38, 38, 0); } 92% { background-color: rgba(220, 38, 38, 0); } 93% { background-color: rgba(220, 38, 38, 0.3); } 94% { background-color: rgba(220, 38, 38, 0); } 96% { background-color: rgba(220, 38, 38, 0.4); } 100% { background-color: rgba(220, 38, 38, 0); } }
+      @keyframes march { to { stroke-dashoffset: -14; } }
+      @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes pulse-glow { 0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 5px #b91c1c); } 50% { opacity: 1; filter: drop-shadow(0 0 20px #f97316); } }
+      
+      /* Curved Banner Effect */
+      .banner-curve {
+        clip-path: polygon(0% 0%, 100% 0%, 95% 50%, 100% 100%, 0% 100%, 5% 50%);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/": "https://esm.sh/react@18.3.1/",
+    "react-dom": "https://esm.sh/react-dom@18.3.1?deps=react@18.3.1",
+    "react-dom/": "https://esm.sh/react-dom@18.3.1&deps=react@18.3.1/",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.16.8?deps=react@18.3.1,react-dom@18.3.1,three@0.165.0",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@9.108.3?deps=react@18.3.1,react-dom@18.3.1,three@0.165.0,@react-three/fiber@8.16.8",
+    "three": "https://esm.sh/three@0.165.0",
+    "three/": "https://esm.sh/three@0.165.0/",
+    "three-stdlib": "https://esm.sh/three-stdlib@2.30.4?deps=three@0.165.0",
+    "zustand": "https://esm.sh/zustand@4.5.2?deps=react@18.3.1",
+    "zustand/": "https://esm.sh/zustand@4.5.2&deps=react@18.3.1/",
+    "url": "https://esm.sh/url@0.11.3",
+    "path": "https://esm.sh/path-browserify@1.0.1",
+    "fs": "https://esm.sh/browserify-fs@1.0.0",
+    "https": "https://esm.sh/https-browserify@1.0.0",
+    "process": "https://esm.sh/process@^0.11.10",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.3"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

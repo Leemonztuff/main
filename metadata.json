@@ -1,0 +1,7 @@
+{
+  "name": "Epic Earth: Shards of Eternum",
+  "description": "A tactical RPG where you collect the Shards of Eternum in a fractured world. Combines open world exploration with 3D tactical battles.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
