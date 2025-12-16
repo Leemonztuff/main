@@ -109,6 +109,7 @@ export interface OverworldSlice {
   standingOnPortal: boolean;
   standingOnSettlement: boolean;
   standingOnTemple: boolean;
+  standingOnDungeon: boolean; // NEW
   isMapOpen: boolean;
   gracePeriodEndTime: number;
   fatigue: number; 
@@ -121,6 +122,7 @@ export interface OverworldSlice {
   movePlayerOverworld: (q: number, r: number) => Promise<void>;
   usePortal: () => void;
   enterSettlement: () => void;
+  enterDungeon: () => void; // NEW
   exitSettlement: () => void;
   enterTemple: () => void;
   toggleMap: () => void;
@@ -167,6 +169,98 @@ const generateTownMap = (): HexCell[] => {
     return cells;
 };
 
+// Generates a proper dungeon layout with Void boundaries and Wall tiles
+const generateDungeonMap = (): HexCell[] => {
+    const width = 16;
+    const height = 16;
+    const cells: HexCell[] = [];
+    
+    // 1. Initialize everything as VOID
+    for (let r = 0; r < height; r++) {
+        for (let q = 0; q < width; q++) {
+            cells.push({ 
+                q, r, 
+                terrain: TerrainType.VOID, // Start as empty void
+                isExplored: false, 
+                isVisible: false, 
+                weather: WeatherType.NONE 
+            });
+        }
+    }
+
+    // Helper to set floor
+    const setFloor = (x: number, y: number) => {
+        const cell = cells.find(c => c.q === x && c.r === y);
+        if (cell) {
+            cell.terrain = TerrainType.CAVE_FLOOR;
+            cell.isExplored = true;
+            cell.isVisible = true; // Fog of war handles dynamic viz later
+        }
+    };
+
+    // 2. Carve Rooms (Floor)
+    const carve = (q: number, r: number, w: number, h: number) => {
+        for (let y = r; y < r + h; y++) {
+            for (let x = q; x < q + w; x++) {
+                setFloor(x, y);
+            }
+        }
+    };
+
+    // Entrance Room
+    carve(6, 12, 4, 3);
+    const startCell = cells.find(c => c.q === 8 && c.r === 14);
+    if(startCell) startCell.poiType = 'EXIT';
+
+    // Main Hall
+    carve(6, 6, 4, 6);
+    
+    // Treasure Room
+    carve(2, 4, 4, 4);
+    
+    // Boss Room
+    carve(10, 2, 5, 5);
+
+    // Corridors (Simple horizontal/vertical carving)
+    carve(2, 6, 4, 1); // Connect left
+    carve(10, 6, 2, 1); // Connect right
+
+    // 3. Wall Generation Pass
+    // Convert any VOID tile that touches a FLOOR tile into a DUNGEON_WALL
+    const neighborsOffsets = [
+        { dq: 1, dr: 0 }, { dq: 0, dr: 1 }, { dq: -1, dr: 1 },
+        { dq: -1, dr: 0 }, { dq: 0, dr: -1 }, { dq: 1, dr: -1 }
+    ];
+
+    const wallCandidates = new Set<HexCell>();
+
+    cells.forEach(cell => {
+        if (cell.terrain === TerrainType.VOID) {
+            let adjacentToFloor = false;
+            for (const offset of neighborsOffsets) {
+                const nQ = cell.q + offset.dq;
+                const nR = cell.r + offset.dr;
+                const neighbor = cells.find(c => c.q === nQ && c.r === nR);
+                if (neighbor && neighbor.terrain === TerrainType.CAVE_FLOOR) {
+                    adjacentToFloor = true;
+                    break;
+                }
+            }
+            if (adjacentToFloor) {
+                wallCandidates.add(cell);
+            }
+        }
+    });
+
+    wallCandidates.forEach(cell => {
+        cell.terrain = TerrainType.DUNGEON_WALL;
+        cell.isExplored = true;
+        cell.isVisible = true; // Show outline
+    });
+
+    return cells;
+}
+
 const updateExploration = (center: PositionComponent, dimension: Dimension, radius: number, currentSet: Set<string>): Set<string> => {
     const safeSet = currentSet || new Set<string>();
     const newSet = new Set(safeSet);
@@ -199,6 +293,7 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
   standingOnPortal: false,
   standingOnSettlement: false,
   standingOnTemple: false,
+  standingOnDungeon: false,
   isMapOpen: false,
   gracePeriodEndTime: 0,
   fatigue: 0,
@@ -293,7 +388,7 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
 
         let path: any[] | null = [];
         
-        if (gameState === GameState.TOWN_EXPLORATION && townMapData) {
+        if ((gameState === GameState.TOWN_EXPLORATION || gameState === GameState.DUNGEON) && townMapData) {
             path = findPath({q: playerPos.x, r: playerPos.y}, {q, r}, townMapData);
         } else {
             path = findPath({q: playerPos.x, r: playerPos.y}, {q, r}, undefined, (q, r) => WorldGenerator.getTile(q, r, dimension));
@@ -304,7 +399,7 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
              else return;
         }
         
-        if (!isGracePeriod) {
+        if (!isGracePeriod && gameState === GameState.OVERWORLD) {
             const isChaseMode = activeOverworldEnemies.some((e: any) => {
                 if (e.dimension !== dimension) return false;
                 const dist = (Math.abs(e.q - playerPos.x) + Math.abs(e.q + e.r - playerPos.x - playerPos.y) + Math.abs(e.r - playerPos.y)) / 2;
@@ -324,14 +419,14 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
         let isExhausted = false;
 
         for (const stepCell of path) {
-            if (get().gameState !== GameState.OVERWORLD && get().gameState !== GameState.TOWN_EXPLORATION) break;
+            if (get().gameState !== GameState.OVERWORLD && get().gameState !== GameState.TOWN_EXPLORATION && get().gameState !== GameState.DUNGEON) break;
             
             const terrainCost = TERRAIN_MOVEMENT_COST[stepCell.terrain] || 1;
             const dimensionMultiplier = dimension === Dimension.UPSIDE_DOWN ? 3 : 1;
             
             currentFatigue += terrainCost * dimensionMultiplier;
             
-            const timeCost = get().gameState === GameState.TOWN_EXPLORATION ? 5 : (60 * terrainCost);
+            const timeCost = (gameState === GameState.TOWN_EXPLORATION || gameState === GameState.DUNGEON) ? 5 : (60 * terrainCost);
             currentTime = (currentTime + timeCost) % 1440;
 
             if (currentFatigue >= 100) {
@@ -369,19 +464,35 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
                 break;
             }
 
-            if (!isGracePeriod) {
+            // ENCOUNTER LOGIC
+            let battleTriggered = false;
+            
+            // 1. Visible Overworld Enemies
+            if (gameState === GameState.OVERWORLD && !isGracePeriod) {
                 const enemyOnTile = get().activeOverworldEnemies.find((e: any) => e.q === stepCell.q && e.r === stepCell.r && e.dimension === dimension);
                 if (enemyOnTile) {
                     get().startBattle(stepCell.terrain, stepCell.weather, enemyOnTile.id);
-                    break;
+                    battleTriggered = true;
                 }
             }
+            
+            // 2. Random Dungeon Encounters (Pokemon Style)
+            if (gameState === GameState.DUNGEON && !battleTriggered && stepCell.poiType !== 'EXIT') {
+                const encounterChance = 0.15; // 15% chance per step
+                if (Math.random() < encounterChance) {
+                    get().addLog("Something stirs in the dark...", "combat");
+                    get().startBattle(stepCell.terrain || TerrainType.CAVE_FLOOR, WeatherType.NONE);
+                    battleTriggered = true;
+                }
+            }
+
+            if (battleTriggered) break;
 
             if (!isAlreadyThere) sfx.playStep();
             
             const { dimension: currentDim, exploredTiles: currentExplored } = get();
             
-            if (get().gameState === GameState.TOWN_EXPLORATION && stepCell.poiType === 'EXIT') {
+            if ((get().gameState === GameState.TOWN_EXPLORATION || get().gameState === GameState.DUNGEON) && stepCell.poiType === 'EXIT') {
                  get().exitSettlement();
                  break;
             }
@@ -415,15 +526,18 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
                     activeOverworldEnemies: newEnemies,
                     standingOnPortal: !!stepCell.hasPortal,
                     standingOnSettlement: (stepCell.terrain === TerrainType.VILLAGE || stepCell.terrain === TerrainType.CASTLE),
-                    standingOnTemple: stepCell.poiType === 'TEMPLE'
+                    standingOnTemple: stepCell.poiType === 'TEMPLE',
+                    standingOnDungeon: stepCell.poiType === 'DUNGEON'
                 });
 
             } else {
+                // Inside Town/Dungeon
                 set({ 
                     playerPos: { x: stepCell.q, y: stepCell.r },
                     standingOnPortal: false,
                     standingOnSettlement: false,
-                    standingOnTemple: false
+                    standingOnTemple: false,
+                    standingOnDungeon: false
                 });
             }
 
@@ -511,6 +625,24 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
         sfx.playVictory(); 
   },
 
+  enterDungeon: () => {
+        const { playerPos } = get();
+        sfx.playStep(); // Heavier sound ideally
+        
+        get().addLog("You descend into the depths...", "narrative");
+
+        const dungeonMap = generateDungeonMap();
+        set({ 
+            gameState: GameState.DUNGEON, 
+            lastOverworldPos: playerPos,
+            townMapData: dungeonMap,
+            playerPos: { x: 8, y: 14 }, // Start pos defined in generator
+            standingOnDungeon: false,
+            mapDimensions: { width: 16, height: 16 },
+            // Don't clear fatigue, dungeons are tiring
+        });
+  },
+
   exitSettlement: () => {
         const { lastOverworldPos } = get();
         if (!lastOverworldPos) return;
@@ -522,7 +654,7 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
             lastOverworldPos: null,
             mapDimensions: { width: DEFAULT_MAP_WIDTH, height: DEFAULT_MAP_HEIGHT }
         });
-        get().addLog("Returned to the wild.", "narrative");
+        get().addLog("Returned to the surface.", "narrative");
   },
 
   enterTemple: () => {

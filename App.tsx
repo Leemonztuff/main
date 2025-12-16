@@ -209,7 +209,8 @@ const App = () => {
       {gameState === GameState.CHARACTER_CREATION && <TitleScreen onComplete={createCharacter} />}
       {gameState === GameState.GAME_WON && <EndingScreen />}
       
-      {(gameState === GameState.OVERWORLD || gameState === GameState.TOWN_EXPLORATION) && (
+      {/* Enable Map for Dungeon State */}
+      {(gameState === GameState.OVERWORLD || gameState === GameState.TOWN_EXPLORATION || gameState === GameState.DUNGEON) && (
         <OverworldMap 
             mapData={townMapData} 
             playerPos={playerPos} 

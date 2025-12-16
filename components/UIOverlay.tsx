@@ -74,9 +74,9 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onOpenTownService }) => {
   const [regionBanner, setRegionBanner] = useState<string | null>(null);
   
   const { 
-      logs, gameState, party, turnOrder, currentTurnIndex, 
+      logs, gameState, party, turnOrder, currentTurnEntityIndex: currentTurnIndex, 
       isInventoryOpen, isMapOpen, toggleInventory, toggleMap, dimension,
-      usePortal, enterSettlement, quitToMenu, enterTemple,
+      usePortal, enterSettlement, enterDungeon, quitToMenu, enterTemple,
       battleEntities, selectAction, selectedAction, selectSpell, selectSkill, hasMoved, hasActed,
       gold, fatigue, worldTime, getItemCount, camp, nextTurn, attemptRun, currentRegionName
   } = useGameStore();
@@ -111,7 +111,8 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onOpenTownService }) => {
   const nearbyWorldFeatures = useGameStore(state => ({ 
       portal: state.standingOnPortal, 
       settlement: state.standingOnSettlement,
-      temple: state.standingOnTemple 
+      temple: state.standingOnTemple,
+      dungeon: state.standingOnDungeon 
   }));
 
   const activeEntityId = turnOrder[currentTurnIndex];
@@ -401,7 +402,10 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onOpenTownService }) => {
                 {gameState === GameState.OVERWORLD && nearbyWorldFeatures.settlement && (
                     <InteractionBtn onClick={enterSettlement} icon="🏰" label="Enter City" color="amber" />
                 )}
-                {gameState === GameState.OVERWORLD && !nearbyWorldFeatures.settlement && !nearbyWorldFeatures.temple && (
+                {gameState === GameState.OVERWORLD && nearbyWorldFeatures.dungeon && (
+                    <InteractionBtn onClick={enterDungeon} icon="☠️" label="Enter Dungeon" color="red" />
+                )}
+                {gameState === GameState.OVERWORLD && !nearbyWorldFeatures.settlement && !nearbyWorldFeatures.temple && !nearbyWorldFeatures.dungeon && (
                     <InteractionBtn onClick={camp} icon="🏕️" label="Make Camp" color="slate" disabled={fatigue < 10} />
                 )}
             </div>
@@ -628,13 +632,28 @@ const SmallHexButton = ({ icon, onClick, disabled, active, pulse, shortcut, labe
     </div>
 );
 
-const InteractionBtn = ({ onClick, icon, label, color, disabled }: any) => (
-    <button onClick={onClick} disabled={disabled} className={`
-        bg-slate-900/80 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-full font-bold shadow-lg 
-        transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center gap-2
-        disabled:opacity-50 disabled:grayscale focus:ring-2 focus:ring-white outline-none
-    `}>
-        <span className="text-lg">{icon}</span>
-        <span className="uppercase tracking-wider text-[10px] text-slate-200">{label}</span>
-    </button>
-);
+const InteractionBtn = ({ onClick, icon, label, color, disabled }: any) => {
+    // Dynamic color handling for new button types
+    let borderColor = 'border-white/20';
+    let textColor = 'text-slate-200';
+    
+    if (color === 'red') {
+        borderColor = 'border-red-500/50 bg-red-900/40 hover:bg-red-800/60';
+        textColor = 'text-red-100';
+    } else if (color === 'purple') {
+        borderColor = 'border-purple-500/50';
+    } else if (color === 'amber') {
+        borderColor = 'border-amber-500/50';
+    }
+
+    return (
+        <button onClick={onClick} disabled={disabled} className={`
+            bg-slate-900/80 backdrop-blur-md border ${borderColor} text-white px-4 py-2 rounded-full font-bold shadow-lg 
+            transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center gap-2
+            disabled:opacity-50 disabled:grayscale focus:ring-2 focus:ring-white outline-none
+        `}>
+            <span className="text-lg">{icon}</span>
+            <span className={`uppercase tracking-wider text-[10px] ${textColor}`}>{label}</span>
+        </button>
+    );
+};

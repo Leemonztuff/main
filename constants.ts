@@ -1,11 +1,9 @@
 
 import { TerrainType, CharacterClass, Attributes, CharacterRace, Item, ItemRarity, EquipmentSlot, Spell, SpellType, Ability, Skill, DamageType, ProgressionNode, Difficulty, WeatherType, EnemyDefinition, CreatureType } from './types';
 
-// SWITCH TO JSDELIVR STRATEGY (REMOTE ASSETS)
-// This ensures images load without local server configuration issues
+// EXPLICIT REQUEST: USE JSDELIVR
 export const WESNOTH_BASE_URL = "https://cdn.jsdelivr.net/gh/wesnoth/wesnoth@master/data/core/images"; 
 export const MC_BASE_URL = "https://cdn.jsdelivr.net/gh/InventivetalentDev/minecraft-assets@1.19.3/assets/minecraft/textures/block"; 
-// Note: We don't have a specific classicon folder on the CDN, so we map directly to unit images below.
 export const CLASS_ICON_BASE_URL = WESNOTH_BASE_URL; 
 
 export const NOISE_TEXTURE_URL = `data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E`;
@@ -37,6 +35,8 @@ export const TERRAIN_COLORS: Record<TerrainType, string> = {
     [TerrainType.LAVA]: '#ef4444',
     [TerrainType.CHASM]: '#020617',
     [TerrainType.WALL_HOUSE]: '#713f12',
+    [TerrainType.DUNGEON_WALL]: '#262626',
+    [TerrainType.VOID]: '#000000',
     [TerrainType.WOOD_FLOOR]: '#78350f',
     [TerrainType.SAVANNAH]: '#d97706',
     [TerrainType.WASTELAND]: '#7f1d1d',
@@ -65,6 +65,8 @@ export const TERRAIN_MOVEMENT_COST: Record<TerrainType, number> = {
     [TerrainType.LAVA]: 99,
     [TerrainType.CHASM]: 99,
     [TerrainType.WALL_HOUSE]: 99,
+    [TerrainType.DUNGEON_WALL]: 99,
+    [TerrainType.VOID]: 99,
     [TerrainType.WOOD_FLOOR]: 1,
     [TerrainType.SAVANNAH]: 1,
     [TerrainType.WASTELAND]: 2,
@@ -143,7 +145,6 @@ export enum ClassArchetype {
     HYBRID = 'HYBRID'
 }
 
-// Mapped directly to Wesnoth units available on CDN to ensure visibility
 export const CLASS_CONFIG: Record<CharacterClass, { icon: string, hex: string, archetype: ClassArchetype }> = {
     [CharacterClass.FIGHTER]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/swordsman.png`, hex: '#ef4444', archetype: ClassArchetype.MARTIAL },
     [CharacterClass.RANGER]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/huntsman.png`, hex: '#22c55e', archetype: ClassArchetype.HYBRID },
@@ -188,6 +189,7 @@ export const ASSETS = {
         GHOUL: `${WESNOTH_BASE_URL}/units/undead/ghoul.png`,
         LICH: `${WESNOTH_BASE_URL}/units/undead-necromancers/ancient-lich.png`,
         MUD_CRAWLER: `${WESNOTH_BASE_URL}/units/monsters/mudcrawler.png`,
+        SHADOW: `${WESNOTH_BASE_URL}/units/undead-spirit/shadow.png`, // CORRECTED PATH
         
         PLAYER_FIGHTER: `${WESNOTH_BASE_URL}/units/human-loyalists/swordsman.png`,
         PLAYER_WIZARD: `${WESNOTH_BASE_URL}/units/human-magi/red-mage.png`,
@@ -212,32 +214,50 @@ export const ASSETS = {
         PLAYER_TIEFLING: `${WESNOTH_BASE_URL}/units/undead-necromancers/dark-sorcerer.png`,
         PLAYER_HALF_ORC: `${WESNOTH_BASE_URL}/units/orcs/warrior.png`,
     },
+    // Granular Dungeon Walls - USING GUARANTEED BASE ASSETS
+    DUNGEON_WALL_VARIANTS: {
+        RIGHT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        LEFT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        TOP_RIGHT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        TOP_LEFT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        BOTTOM_RIGHT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        BOTTOM_LEFT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        CONVEX_TOP_RIGHT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        CONVEX_TOP_LEFT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        CONVEX_BOTTOM_RIGHT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        CONVEX_BOTTOM_LEFT: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+        FULL: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
+    },
     TERRAIN: {
+        // Fix for reported missing sprites: corrected paths to match Wesnoth repo structure
         [TerrainType.GRASS]: `${WESNOTH_BASE_URL}/terrain/grass/green.png`,
         [TerrainType.PLAINS]: `${WESNOTH_BASE_URL}/terrain/grass/semi-dry.png`,
         [TerrainType.TAIGA]: `${WESNOTH_BASE_URL}/terrain/grass/dry.png`,
-        [TerrainType.JUNGLE]: `${WESNOTH_BASE_URL}/terrain/grass/green.png`,
+        [TerrainType.JUNGLE]: `${WESNOTH_BASE_URL}/terrain/forest/rainforest.png`, // Fixed path
         [TerrainType.TUNDRA]: `${WESNOTH_BASE_URL}/terrain/frozen/snow.png`,
-        [TerrainType.FOREST]: `${WESNOTH_BASE_URL}/terrain/grass/green.png`,
-        [TerrainType.WATER]: `${WESNOTH_BASE_URL}/terrain/water/coast.png`,
+        [TerrainType.FOREST]: `${WESNOTH_BASE_URL}/terrain/grass/green.png`, 
+        [TerrainType.WATER]: `${WESNOTH_BASE_URL}/terrain/water/coast.png`, // Fixed path
         [TerrainType.MOUNTAIN]: `${WESNOTH_BASE_URL}/terrain/mountains/basic.png`,
         [TerrainType.VILLAGE]: `${WESNOTH_BASE_URL}/terrain/village/human-cottage.png`,
-        [TerrainType.CASTLE]: `${WESNOTH_BASE_URL}/terrain/flat/dirt.png`,
-        [TerrainType.RUINS]: `${WESNOTH_BASE_URL}/terrain/flat/dirt.png`,
+        [TerrainType.CASTLE]: `${WESNOTH_BASE_URL}/terrain/castle/castle.png`, // Fixed path
+        [TerrainType.RUINS]: `${WESNOTH_BASE_URL}/terrain/castle/ruin.png`, // Fixed path
         [TerrainType.DESERT]: `${WESNOTH_BASE_URL}/terrain/sand/desert.png`,
         [TerrainType.SWAMP]: `${WESNOTH_BASE_URL}/terrain/swamp/water-tile.png`,
+        // Cave Floor - Standard base asset
         [TerrainType.CAVE_FLOOR]: `${WESNOTH_BASE_URL}/terrain/cave/floor.png`,
-        [TerrainType.FUNGUS]: `${WESNOTH_BASE_URL}/terrain/cave/fungus-tile.png`,
-        [TerrainType.LAVA]: `${WESNOTH_BASE_URL}/terrain/chasm/lava.png`,
+        [TerrainType.FUNGUS]: `${WESNOTH_BASE_URL}/terrain/cave/fungus.png`, // Fixed path
+        [TerrainType.LAVA]: `${WESNOTH_BASE_URL}/terrain/unwalkable/lava.png`, // Fixed path
         [TerrainType.CHASM]: `${WESNOTH_BASE_URL}/terrain/chasm/earthy.png`,
-        [TerrainType.COBBLESTONE]: `${WESNOTH_BASE_URL}/terrain/path/cobble.png`,
-        [TerrainType.DIRT_ROAD]: `${WESNOTH_BASE_URL}/terrain/path/dirt.png`,
-        [TerrainType.WOOD_FLOOR]: `${WESNOTH_BASE_URL}/terrain/interior/wooden.png`, 
-        [TerrainType.STONE_FLOOR]: `${WESNOTH_BASE_URL}/terrain/interior/stone.png`, 
-        [TerrainType.WALL_HOUSE]: `${WESNOTH_BASE_URL}/terrain/walls/stone.png`,
+        [TerrainType.COBBLESTONE]: `${WESNOTH_BASE_URL}/terrain/village/cobbles.png`, // Fixed path
+        [TerrainType.DIRT_ROAD]: `${WESNOTH_BASE_URL}/terrain/flat/dirt.png`, // Fixed path
+        [TerrainType.WOOD_FLOOR]: `${WESNOTH_BASE_URL}/terrain/interior/wood-regular.png`, // Fixed path
+        [TerrainType.STONE_FLOOR]: `${WESNOTH_BASE_URL}/terrain/interior/stone-regular.png`, // Fixed path
+        [TerrainType.WALL_HOUSE]: `${WESNOTH_BASE_URL}/terrain/walls/wall-stone.png`, // Fixed path
+        [TerrainType.DUNGEON_WALL]: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
         [TerrainType.SAVANNAH]: `${WESNOTH_BASE_URL}/terrain/grass/semi-dry.png`, 
         [TerrainType.WASTELAND]: `${WESNOTH_BASE_URL}/terrain/flat/dirt.png`,
         [TerrainType.BADLANDS]: `${WESNOTH_BASE_URL}/terrain/sand/desert.png`,
+        [TerrainType.VOID]: ``, 
     },
     BLOCK_TEXTURES: {
         [TerrainType.GRASS]: `${MC_BASE_URL}/grass_block_top.png`,
@@ -257,33 +277,36 @@ export const ASSETS = {
         [TerrainType.TAIGA]: `${MC_BASE_URL}/podzol_top.png`,
         [TerrainType.TUNDRA]: `${MC_BASE_URL}/snow.png`,
         [TerrainType.RUINS]: `${MC_BASE_URL}/mossy_cobblestone.png`,
-        [TerrainType.CAVE_FLOOR]: `${MC_BASE_URL}/cobblestone.png`,
+        [TerrainType.CAVE_FLOOR]: `${WESNOTH_BASE_URL}/terrain/cave/floor.png`,
         [TerrainType.FUNGUS]: `${MC_BASE_URL}/mycelium_top.png`,
         [TerrainType.CHASM]: `${MC_BASE_URL}/black_concrete.png`,
         [TerrainType.WOOD_FLOOR]: `${MC_BASE_URL}/oak_planks.png`,
         [TerrainType.WALL_HOUSE]: `${MC_BASE_URL}/bricks.png`,
+        [TerrainType.DUNGEON_WALL]: `${WESNOTH_BASE_URL}/terrain/cave/wall.png`,
         [TerrainType.SAVANNAH]: `${MC_BASE_URL}/grass_block_top.png`, 
         [TerrainType.WASTELAND]: `${MC_BASE_URL}/podzol_top.png`,
-        [TerrainType.BADLANDS]: `${MC_BASE_URL}/sand.png`, 
+        [TerrainType.BADLANDS]: `${MC_BASE_URL}/sand.png`,
+        [TerrainType.VOID]: `${MC_BASE_URL}/black_concrete.png`, 
     },
     OVERLAYS: {
         [TerrainType.FOREST]: [
             `${WESNOTH_BASE_URL}/terrain/forest/pine-tile.png`,
             `${WESNOTH_BASE_URL}/terrain/forest/deciduous-summer-tile.png`
         ], 
-        [TerrainType.JUNGLE]: `${WESNOTH_BASE_URL}/terrain/forest/rainforest-tile.png`, 
+        [TerrainType.JUNGLE]: `${WESNOTH_BASE_URL}/terrain/forest/rainforest.png`, // Fixed
         [TerrainType.TAIGA]: `${WESNOTH_BASE_URL}/terrain/forest/snow-forest-tile.png`, 
         [TerrainType.MOUNTAIN]: [
             `${WESNOTH_BASE_URL}/terrain/mountains/basic-tile.png`,
             `${WESNOTH_BASE_URL}/terrain/mountains/dry-tile.png`
         ], 
         [TerrainType.VILLAGE]: `${WESNOTH_BASE_URL}/terrain/village/human-city-tile.png`, 
-        [TerrainType.CASTLE]: `${WESNOTH_BASE_URL}/terrain/castle/castle.png`, 
-        [TerrainType.RUINS]: `${WESNOTH_BASE_URL}/terrain/castle/ruin.png`, 
-        [TerrainType.FUNGUS]: `${WESNOTH_BASE_URL}/terrain/cave/fungus-tile.png`,
+        [TerrainType.CASTLE]: `${WESNOTH_BASE_URL}/terrain/castle/castle.png`, // Fixed
+        [TerrainType.RUINS]: `${WESNOTH_BASE_URL}/terrain/castle/ruin.png`, // Fixed
+        [TerrainType.FUNGUS]: `${WESNOTH_BASE_URL}/terrain/cave/fungus.png`, // Fixed
     },
-    TEMPLE_ICON: `${WESNOTH_BASE_URL}/terrain/castle/outside-dwarven/dwarven-keep-tile.png`,
+    TEMPLE_ICON: `${WESNOTH_BASE_URL}/terrain/castle/dwarven-keep-tile.png`, // Adjusted
     PORTAL_ICON: `${WESNOTH_BASE_URL}/scenery/summoning-center.png`,
+    DUNGEON_ICON: `${WESNOTH_BASE_URL}/scenery/mine-abandoned.png`, // NEW DUNGEON ICON
     
     DECORATIONS: {
         GRASS_1: `${MC_BASE_URL}/fern.png`,

@@ -6,6 +6,7 @@ export enum GameState {
   CHARACTER_CREATION,
   OVERWORLD,
   TOWN_EXPLORATION,
+  DUNGEON, // New State
   BATTLE_INIT,
   BATTLE_TACTICAL,
   BATTLE_RESOLUTION,
@@ -48,7 +49,7 @@ export interface HexCell {
   isVisible: boolean;
   hasPortal?: boolean;
   hasEncounter?: boolean;
-  poiType?: 'VILLAGE' | 'CASTLE' | 'RUINS' | 'SHOP' | 'INN' | 'PLAZA' | 'EXIT' | 'TEMPLE'; 
+  poiType?: 'VILLAGE' | 'CASTLE' | 'RUINS' | 'SHOP' | 'INN' | 'PLAZA' | 'EXIT' | 'TEMPLE' | 'DUNGEON'; 
   regionName?: string;
 }
 
@@ -74,6 +75,8 @@ export enum TerrainType {
   LAVA = 'LAVA',
   CHASM = 'CHASM',
   WALL_HOUSE = 'WALL_HOUSE',
+  DUNGEON_WALL = 'DUNGEON_WALL',
+  VOID = 'VOID', // Empty space outside map
   WOOD_FLOOR = 'WOOD_FLOOR',
   SAVANNAH = 'SAVANNAH',
   WASTELAND = 'WASTELAND',

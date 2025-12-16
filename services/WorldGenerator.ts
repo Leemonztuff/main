@@ -252,7 +252,8 @@ export class WorldGenerator {
         let poiType: HexCell['poiType'] = undefined;
 
         const isSafeLand = terrain !== TerrainType.WATER && terrain !== TerrainType.MOUNTAIN && terrain !== TerrainType.LAVA && terrain !== TerrainType.CHASM;
-        
+        const isDangerousLand = terrain === TerrainType.MOUNTAIN || terrain === TerrainType.SWAMP || terrain === TerrainType.BADLANDS || terrain === TerrainType.RUINS;
+
         if (isSafeLand) {
             // Chunk based spawning for towns
             const chunkQ = Math.floor(q / 10);
@@ -286,6 +287,18 @@ export class WorldGenerator {
                 const dangerLevel = (dimension === Dimension.UPSIDE_DOWN ? 0.2 : 0.05);
                 if (rng.next() < dangerLevel) hasEncounter = true;
             }
+        }
+        
+        // DUNGEON SPAWNING (Independent of safety)
+        // GUARANTEED TEST SPAWN at [3,3]
+        if (q === 3 && r === 3) {
+            poiType = 'DUNGEON';
+        } 
+        else if (isDangerousLand || terrain === TerrainType.FOREST) {
+             // Increased chance to 8% to make them visible
+             if (rng.next() < 0.08 && !structureType && !poiType) {
+                 poiType = 'DUNGEON';
+             }
         }
 
         let finalTerrain = terrain;

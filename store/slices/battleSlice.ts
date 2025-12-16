@@ -35,7 +35,10 @@ const generateBattleGrid = (terrainType: TerrainType): BattleCell[] => {
         wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.VILLAGE]!; 
     }
     if (safeTerrain === TerrainType.COBBLESTONE) floorTex = ASSETS.BLOCK_TEXTURES[TerrainType.COBBLESTONE]!;
-    if (safeTerrain === TerrainType.CAVE_FLOOR) wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.MOUNTAIN]!;
+    if (safeTerrain === TerrainType.CAVE_FLOOR) {
+        floorTex = ASSETS.BLOCK_TEXTURES[TerrainType.CAVE_FLOOR]!;
+        wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.DUNGEON_WALL]!;
+    }
 
     const noise = (x: number, z: number, freq: number = 0.5) => Math.sin(x * freq) + Math.cos(z * freq) + Math.sin((x + z) * freq * 0.5);
     const baseTerrainCost = TERRAIN_MOVEMENT_COST[safeTerrain] || 1;
@@ -59,6 +62,14 @@ const generateBattleGrid = (terrainType: TerrainType): BattleCell[] => {
                  if (Math.random() > 0.85) { height = 2.0; isObstacle = true; blocksSight = true; textureUrl = ASSETS.BLOCK_TEXTURES[TerrainType.FOREST]!; }
             } else if ([TerrainType.CASTLE, TerrainType.RUINS].includes(safeTerrain)) {
                  if (x % 4 === 0 && z % 4 === 0) { height = 3; isObstacle = true; blocksSight = true; textureUrl = wallTex; }
+            } else if (safeTerrain === TerrainType.CAVE_FLOOR) {
+                 // Simple cave walls logic
+                 if (x === 0 || z === 0 || x === size - 1 || z === size - 1 || (Math.random() > 0.9)) { 
+                     height = 2.5; 
+                     isObstacle = true; 
+                     blocksSight = true; 
+                     textureUrl = wallTex; 
+                 }
             }
 
             if (x > 4 && x < size - 5 && z > 4 && z < size - 5) {

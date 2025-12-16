@@ -60,8 +60,13 @@ const useSpriteLoader = (additionalSprites: string[] = []) => {
             if (Array.isArray(val)) val.forEach(v => urlsToLoad.add(v));
             else urlsToLoad.add(val as string);
         });
+        
+        // Add Specific Dungeon Wall Variants
+        Object.values(ASSETS.DUNGEON_WALL_VARIANTS).forEach(url => urlsToLoad.add(url));
+
         if (ASSETS.TEMPLE_ICON) urlsToLoad.add(ASSETS.TEMPLE_ICON);
         if (ASSETS.PORTAL_ICON) urlsToLoad.add(ASSETS.PORTAL_ICON);
+        if (ASSETS.DUNGEON_ICON) urlsToLoad.add(ASSETS.DUNGEON_ICON);
         
         // 2. Dynamic Sprites (Enemies & Player)
         additionalSprites.forEach(url => {
@@ -80,7 +85,8 @@ const useSpriteLoader = (additionalSprites: string[] = []) => {
                 setVersion(v => v + 1); 
             };
             img.onerror = () => {
-                console.warn(`Failed to load sprite: ${url}`);
+                // Don't log spam, fallback logic handles missing
+                // console.warn(`Failed to load sprite: ${url}`);
             };
             loadedImages[url] = img;
         });
@@ -232,12 +238,13 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
         const logicalWidth = canvas.width / (dpr * zoom);
         const logicalHeight = canvas.height / (dpr * zoom);
 
-        // Background
-        ctx.fillStyle = dimension === Dimension.UPSIDE_DOWN ? '#0f0518' : '#0f172a';
+        // Background (Black for Dungeon Void effect)
+        ctx.fillStyle = dimension === Dimension.UPSIDE_DOWN ? '#0f0518' : '#000000';
         ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
         const startX = -offset.x - HEX_SIZE * 2;
         const startY = -offset.y - HEX_SIZE * 2;
+        // Increase render buffer to prevent popping
         const endX = startX + logicalWidth + HEX_SIZE * 4;
         const endY = startY + logicalHeight + HEX_SIZE * 4;
 
@@ -249,7 +256,41 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
             return dist <= visionRange;
         };
 
+        // --- HELPER FOR DUNGEON WALLS ---
+        // Determines which wall sprite to use based on neighbors
+        const getWallTexture = (cell: HexCell) => {
+            if (cell.terrain !== TerrainType.DUNGEON_WALL || !mapData) return ASSETS.DUNGEON_WALL_VARIANTS.FULL;
+
+            // CRITICAL FIX: Changed variable name from 'check' to 'checkFloor' to prevent crash
+            const checkFloor = (dq: number, dr: number) => {
+                const n = mapData.find(c => c.q === cell.q + dq && c.r === cell.r + dr);
+                return n && n.terrain === TerrainType.CAVE_FLOOR;
+            };
+
+            // Mapping hex directions to Wesnoth Wall Pieces
+            // Note: The naming 'convex-r' means the wall "bulges" to the right, effectively wrapping a floor to its right.
+            // Directions: (1,0) E, (1,-1) NE, (0,-1) NW, (-1,0) W, (-1,1) SW, (0,1) SE
+            
+            if (checkFloor(1, 0)) return ASSETS.DUNGEON_WALL_VARIANTS.RIGHT; // East
+            if (checkFloor(-1, 0)) return ASSETS.DUNGEON_WALL_VARIANTS.LEFT; // West
+            
+            if (checkFloor(0, 1)) return ASSETS.DUNGEON_WALL_VARIANTS.CONVEX_BOTTOM_RIGHT; // SE
+            if (checkFloor(-1, 1)) return ASSETS.DUNGEON_WALL_VARIANTS.CONVEX_BOTTOM_LEFT; // SW
+            
+            if (checkFloor(1, -1)) return ASSETS.DUNGEON_WALL_VARIANTS.CONVEX_TOP_RIGHT; // NE
+            if (checkFloor(0, -1)) return ASSETS.DUNGEON_WALL_VARIANTS.CONVEX_TOP_LEFT; // NW
+
+            // Fallback for concave corners (inner corners) - Simplified check
+            // If surrounded by walls but diagonal has floor... standard hex tiling is tricky.
+            // We use standard convex pieces as primary walls.
+
+            return ASSETS.DUNGEON_WALL_VARIANTS.FULL;
+        };
+
         const drawTile = (cell: HexCell, isPathPreview = false) => {
+            // SKIP VOID TILES (Let background show through for dungeon effect)
+            if (cell.terrain === TerrainType.VOID) return;
+
             const { x, y } = hexToPixel(cell.q, cell.r);
             
             // INTEGER SNAPPING: Round to nearest pixel to avoid blurring
@@ -274,13 +315,35 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
 
             // 1. DRAW BASE TERRAIN
             if (cell.isExplored || mapData) { 
-                const baseTextureUrl = ASSETS.TERRAIN[cell.terrain];
+                let baseTextureUrl = ASSETS.TERRAIN[cell.terrain];
+                
+                // DYNAMIC WALL SELECTION
+                if (cell.terrain === TerrainType.DUNGEON_WALL) {
+                    baseTextureUrl = getWallTexture(cell);
+                }
+
                 const baseImg = images[baseTextureUrl];
 
                 if (baseImg && baseImg.complete && baseImg.naturalWidth > 0) {
+                    // For walls, we might want to draw them slightly larger or unclipped to handle overlaps nicely?
+                    // Wesnoth walls often overlap. For now, clip to hex to keep it clean.
                     ctx.save();
-                    ctx.clip();
-                    ctx.drawImage(baseImg, screenX - HEX_SIZE, screenY - HEX_SIZE * Math.sqrt(3)/2, HEX_SIZE * 2, HEX_SIZE * Math.sqrt(3));
+                    // ctx.clip(); // Unclip for walls? It creates nice overlap but might mess up z-index. Keep clip for now.
+                    if (cell.terrain !== TerrainType.DUNGEON_WALL) ctx.clip();
+                    
+                    // Center and scale image
+                    // Wesnoth sprites are often 72x72. Our hex is size 32 (width 64).
+                    // We need to scale appropriately.
+                    const drawW = HEX_SIZE * 2;
+                    const drawH = HEX_SIZE * Math.sqrt(3); // ~55
+                    
+                    // Adjust scaling specifically for walls to make them tall
+                    if (cell.terrain === TerrainType.DUNGEON_WALL) {
+                        const wallH = drawH * 1.5;
+                        ctx.drawImage(baseImg, screenX - drawW/2, screenY - wallH * 0.7, drawW, wallH);
+                    } else {
+                        ctx.drawImage(baseImg, screenX - HEX_SIZE, screenY - HEX_SIZE * Math.sqrt(3)/2, drawW, drawH);
+                    }
                     
                     if (!isVisible && !mapData) {
                         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -303,10 +366,12 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                     ctx.stroke();
                 }
                 
-                // Border
-                ctx.strokeStyle = isPathPreview ? '#fbbf24' : 'rgba(0,0,0,0.2)';
-                ctx.lineWidth = isPathPreview ? 2 : 1;
-                ctx.stroke();
+                // Border (Only for non-walls usually, walls look better without borders)
+                if (cell.terrain !== TerrainType.DUNGEON_WALL) {
+                    ctx.strokeStyle = isPathPreview ? '#fbbf24' : 'rgba(0,0,0,0.2)';
+                    ctx.lineWidth = isPathPreview ? 2 : 1;
+                    ctx.stroke();
+                }
 
                 // 2. OVERLAYS
                 const overlayData = ASSETS.OVERLAYS[cell.terrain];
@@ -331,6 +396,11 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                         if (templeImg && templeImg.complete && templeImg.naturalWidth > 0) {
                             ctx.drawImage(templeImg, screenX - HEX_SIZE, screenY - HEX_SIZE, HEX_SIZE * 2, HEX_SIZE * 2);
                         } else iconChar = '⛩️';
+                    } else if (cell.poiType === 'DUNGEON') {
+                        const dungeonImg = images[ASSETS.DUNGEON_ICON];
+                        if (dungeonImg && dungeonImg.complete && dungeonImg.naturalWidth > 0) {
+                            ctx.drawImage(dungeonImg, screenX - HEX_SIZE, screenY - HEX_SIZE, HEX_SIZE * 2, HEX_SIZE * 2);
+                        } else iconChar = '☠️';
                     } else if (cell.poiType === 'SHOP') iconChar = '💰';
                     else if (cell.poiType === 'INN') iconChar = '🍺';
                     else if (cell.poiType === 'EXIT') iconChar = '🚪';
@@ -374,7 +444,10 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
 
         // Render Map Grid
         if (mapData) {
-            mapData.forEach(cell => drawTile(cell, hoverPath.some(h => h.q === cell.q && h.r === cell.r)));
+            // Sort to draw top-down to handle wall overlap correctly
+            // Hex coordinates with higher 'r' are lower on screen. Draw them last.
+            const sorted = [...mapData].sort((a, b) => a.r - b.r);
+            sorted.forEach(cell => drawTile(cell, hoverPath.some(h => h.q === cell.q && h.r === cell.r)));
         } else {
             const topLeft = pixelToAxial(startX, startY);
             const bottomRight = pixelToAxial(endX, endY);

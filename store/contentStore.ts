@@ -178,7 +178,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
     },
     'shadow_stalker': { 
         id: 'shadow_stalker', name: 'Shadow Stalker', type: CreatureType.FIEND,
-        sprite: `${ASSETS.WESNOTH_BASE_URL}/units/undead/shadow.png`, 
+        sprite: ASSETS.UNITS.SHADOW, // UPDATED TO USE CORRECT CONSTANT
         hp: 40, ac: 14, xpReward: 450, damage: 10, initiativeBonus: 4,
         attackDamageType: DamageType.NECROTIC, 
         resistances: [DamageType.BLUDGEONING, DamageType.PIERCING, DamageType.SLASHING],
