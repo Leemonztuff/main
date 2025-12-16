@@ -1,10 +1,12 @@
 
-import { TerrainType, CharacterClass, Attributes, CharacterRace, Item, ItemRarity, EquipmentSlot, Spell, SpellType, Ability, Skill, DamageType, ProgressionNode, Difficulty, WeatherType, EffectType, EffectTarget, EffectDuration } from './types';
+import { TerrainType, CharacterClass, Attributes, CharacterRace, Item, ItemRarity, EquipmentSlot, Spell, SpellType, Ability, Skill, DamageType, ProgressionNode, Difficulty, WeatherType, EnemyDefinition, CreatureType } from './types';
 
-// SWITCH TO JSDELIVR CDN FOR RELIABLE WEB PREVIEW
-export const WESNOTH_BASE_URL = "/assets/wesnoth"; // Changed to local relative path for consistency
-export const MC_BASE_URL = "/assets/minecraft"; // Changed to local relative path
-export const CLASS_ICON_BASE_URL = "/assets/classicon"; // New constant for class icons
+// SWITCH TO JSDELIVR STRATEGY (REMOTE ASSETS)
+// This ensures images load without local server configuration issues
+export const WESNOTH_BASE_URL = "https://cdn.jsdelivr.net/gh/wesnoth/wesnoth@master/data/core/images"; 
+export const MC_BASE_URL = "https://cdn.jsdelivr.net/gh/InventivetalentDev/minecraft-assets@1.19.3/assets/minecraft/textures/block"; 
+// Note: We don't have a specific classicon folder on the CDN, so we map directly to unit images below.
+export const CLASS_ICON_BASE_URL = WESNOTH_BASE_URL; 
 
 export const NOISE_TEXTURE_URL = `data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E`;
 
@@ -141,19 +143,19 @@ export enum ClassArchetype {
     HYBRID = 'HYBRID'
 }
 
-// These paths must match what download_assets.mjs produces in public/assets/classicon/
+// Mapped directly to Wesnoth units available on CDN to ensure visibility
 export const CLASS_CONFIG: Record<CharacterClass, { icon: string, hex: string, archetype: ClassArchetype }> = {
-    [CharacterClass.FIGHTER]: { icon: `${CLASS_ICON_BASE_URL}/fighter.png`, hex: '#ef4444', archetype: ClassArchetype.MARTIAL },
-    [CharacterClass.RANGER]: { icon: `${CLASS_ICON_BASE_URL}/ranger.png`, hex: '#22c55e', archetype: ClassArchetype.HYBRID },
-    [CharacterClass.WIZARD]: { icon: `${CLASS_ICON_BASE_URL}/wizard.png`, hex: '#3b82f6', archetype: ClassArchetype.CASTER },
-    [CharacterClass.CLERIC]: { icon: `${CLASS_ICON_BASE_URL}/cleric.png`, hex: '#eab308', archetype: ClassArchetype.CASTER },
-    [CharacterClass.ROGUE]: { icon: `${CLASS_ICON_BASE_URL}/rogue.png`, hex: '#a8a29e', archetype: ClassArchetype.MARTIAL },
-    [CharacterClass.BARBARIAN]: { icon: `${CLASS_ICON_BASE_URL}/barbarian.png`, hex: '#dc2626', archetype: ClassArchetype.MARTIAL },
-    [CharacterClass.PALADIN]: { icon: `${CLASS_ICON_BASE_URL}/paladin.png`, hex: '#f59e0b', archetype: ClassArchetype.HYBRID },
-    [CharacterClass.SORCERER]: { icon: `${CLASS_ICON_BASE_URL}/sorcerer.png`, hex: '#db2777', archetype: ClassArchetype.CASTER },
-    [CharacterClass.WARLOCK]: { icon: `${CLASS_ICON_BASE_URL}/warlock.png`, hex: '#7e22ce', archetype: ClassArchetype.CASTER },
-    [CharacterClass.DRUID]: { icon: `${CLASS_ICON_BASE_URL}/druid.png`, hex: '#65a30d', archetype: ClassArchetype.CASTER },
-    [CharacterClass.BARD]: { icon: `${CLASS_ICON_BASE_URL}/bard.png`, hex: '#f472b6', archetype: ClassArchetype.CASTER }
+    [CharacterClass.FIGHTER]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/swordsman.png`, hex: '#ef4444', archetype: ClassArchetype.MARTIAL },
+    [CharacterClass.RANGER]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/huntsman.png`, hex: '#22c55e', archetype: ClassArchetype.HYBRID },
+    [CharacterClass.WIZARD]: { icon: `${WESNOTH_BASE_URL}/units/human-magi/red-mage.png`, hex: '#3b82f6', archetype: ClassArchetype.CASTER },
+    [CharacterClass.CLERIC]: { icon: `${WESNOTH_BASE_URL}/units/human-magi/white-mage.png`, hex: '#eab308', archetype: ClassArchetype.CASTER },
+    [CharacterClass.ROGUE]: { icon: `${WESNOTH_BASE_URL}/units/human-outlaws/thief.png`, hex: '#a8a29e', archetype: ClassArchetype.MARTIAL },
+    [CharacterClass.BARBARIAN]: { icon: `${WESNOTH_BASE_URL}/units/human-outlaws/thug.png`, hex: '#dc2626', archetype: ClassArchetype.MARTIAL },
+    [CharacterClass.PALADIN]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/paladin.png`, hex: '#f59e0b', archetype: ClassArchetype.HYBRID },
+    [CharacterClass.SORCERER]: { icon: `${WESNOTH_BASE_URL}/units/human-magi/silver-mage.png`, hex: '#db2777', archetype: ClassArchetype.CASTER },
+    [CharacterClass.WARLOCK]: { icon: `${WESNOTH_BASE_URL}/units/human-magi/dark-adept.png`, hex: '#7e22ce', archetype: ClassArchetype.CASTER },
+    [CharacterClass.DRUID]: { icon: `${WESNOTH_BASE_URL}/units/elves-wood/shaman.png`, hex: '#65a30d', archetype: ClassArchetype.CASTER },
+    [CharacterClass.BARD]: { icon: `${WESNOTH_BASE_URL}/units/human-loyalists/fencer.png`, hex: '#f472b6', archetype: ClassArchetype.CASTER }
 };
 
 export const RACE_ICONS: Record<CharacterRace, string> = {
@@ -174,18 +176,19 @@ export const ASSETS = {
         GOBLIN: `${WESNOTH_BASE_URL}/units/goblins/spearman.png`,
         ORC: `${WESNOTH_BASE_URL}/units/orcs/grunt.png`,
         ORC_ARCHER: `${WESNOTH_BASE_URL}/units/orcs/archer.png`,
-        SKELETON: `${WESNOTH_BASE_URL}/units/undead-skeletal/skeleton.png`,
-        SKELETON_ARCHER: `${WESNOTH_BASE_URL}/units/undead-skeletal/archer.png`,
+        SKELETON: `${WESNOTH_BASE_URL}/units/undead-skeletal/skeleton.png`, 
+        SKELETON_ARCHER: `${WESNOTH_BASE_URL}/units/undead-skeletal/archer.png`, 
         NECROMANCER: `${WESNOTH_BASE_URL}/units/undead-necromancers/dark-sorcerer.png`,
         WOLF: `${WESNOTH_BASE_URL}/units/monsters/wolf.png`,
+        BEAR: `${WESNOTH_BASE_URL}/units/monsters/bear.png`,
         BAT: `${WESNOTH_BASE_URL}/units/monsters/vampire-bat.png`,
-        SPIDER: `${WESNOTH_BASE_URL}/units/monsters/giant-spider.png`,
+        SPIDER: `${WESNOTH_BASE_URL}/units/monsters/giant-spider.png`, 
         ZOMBIE: `${WESNOTH_BASE_URL}/units/undead/walking-corpse.png`,
         TROLL: `${WESNOTH_BASE_URL}/units/trolls/whelp.png`,
         GHOUL: `${WESNOTH_BASE_URL}/units/undead/ghoul.png`,
         LICH: `${WESNOTH_BASE_URL}/units/undead-necromancers/ancient-lich.png`,
         MUD_CRAWLER: `${WESNOTH_BASE_URL}/units/monsters/mudcrawler.png`,
-
+        
         PLAYER_FIGHTER: `${WESNOTH_BASE_URL}/units/human-loyalists/swordsman.png`,
         PLAYER_WIZARD: `${WESNOTH_BASE_URL}/units/human-magi/red-mage.png`,
         PLAYER_ROGUE: `${WESNOTH_BASE_URL}/units/human-outlaws/thief.png`,
@@ -193,16 +196,16 @@ export const ASSETS = {
         PLAYER_BARBARIAN: `${WESNOTH_BASE_URL}/units/human-outlaws/thug.png`,
         PLAYER_BARD: `${WESNOTH_BASE_URL}/units/human-loyalists/fencer.png`,
         PLAYER_DRUID: `${WESNOTH_BASE_URL}/units/elves-wood/shaman.png`,
-        PLAYER_PALADIN: `${WESNOTH_BASE_URL}/units/human-loyalists/paladin.png`,
+        PLAYER_PALADIN: `${WESNOTH_BASE_URL}/units/human-loyalists/paladin.png`, 
         PLAYER_RANGER: `${WESNOTH_BASE_URL}/units/human-loyalists/huntsman.png`,
         PLAYER_SORCERER: `${WESNOTH_BASE_URL}/units/human-magi/silver-mage.png`,
         PLAYER_WARLOCK: `${WESNOTH_BASE_URL}/units/human-magi/dark-adept.png`,
-
+        
         ELF_FIGHTER: `${WESNOTH_BASE_URL}/units/elves-wood/hero.png`,
         ELF_ARCHER: `${WESNOTH_BASE_URL}/units/elves-wood/archer.png`,
         DWARF_FIGHTER: `${WESNOTH_BASE_URL}/units/dwarves/steelclad.png`,
         DWARF_GUARD: `${WESNOTH_BASE_URL}/units/dwarves/guardsman.png`,
-
+        
         PLAYER_HALFLING: `${WESNOTH_BASE_URL}/units/human-outlaws/footpad.png`,
         PLAYER_DRAGONBORN: `${WESNOTH_BASE_URL}/units/drakes/fighter.png`,
         PLAYER_GNOME: `${WESNOTH_BASE_URL}/units/dwarves/thunderer.png`,
@@ -229,10 +232,10 @@ export const ASSETS = {
         [TerrainType.CHASM]: `${WESNOTH_BASE_URL}/terrain/chasm/earthy.png`,
         [TerrainType.COBBLESTONE]: `${WESNOTH_BASE_URL}/terrain/path/cobble.png`,
         [TerrainType.DIRT_ROAD]: `${WESNOTH_BASE_URL}/terrain/path/dirt.png`,
-        [TerrainType.WOOD_FLOOR]: `${WESNOTH_BASE_URL}/terrain/interior/wooden.png`,
-        [TerrainType.STONE_FLOOR]: `${WESNOTH_BASE_URL}/terrain/interior/stone.png`,
+        [TerrainType.WOOD_FLOOR]: `${WESNOTH_BASE_URL}/terrain/interior/wooden.png`, 
+        [TerrainType.STONE_FLOOR]: `${WESNOTH_BASE_URL}/terrain/interior/stone.png`, 
         [TerrainType.WALL_HOUSE]: `${WESNOTH_BASE_URL}/terrain/walls/stone.png`,
-        [TerrainType.SAVANNAH]: `${WESNOTH_BASE_URL}/terrain/grass/semi-dry.png`,
+        [TerrainType.SAVANNAH]: `${WESNOTH_BASE_URL}/terrain/grass/semi-dry.png`, 
         [TerrainType.WASTELAND]: `${WESNOTH_BASE_URL}/terrain/flat/dirt.png`,
         [TerrainType.BADLANDS]: `${WESNOTH_BASE_URL}/terrain/sand/desert.png`,
     },
@@ -259,29 +262,29 @@ export const ASSETS = {
         [TerrainType.CHASM]: `${MC_BASE_URL}/black_concrete.png`,
         [TerrainType.WOOD_FLOOR]: `${MC_BASE_URL}/oak_planks.png`,
         [TerrainType.WALL_HOUSE]: `${MC_BASE_URL}/bricks.png`,
-        [TerrainType.SAVANNAH]: `${MC_BASE_URL}/grass_block_top.png`,
+        [TerrainType.SAVANNAH]: `${MC_BASE_URL}/grass_block_top.png`, 
         [TerrainType.WASTELAND]: `${MC_BASE_URL}/podzol_top.png`,
-        [TerrainType.BADLANDS]: `${MC_BASE_URL}/sand.png`,
+        [TerrainType.BADLANDS]: `${MC_BASE_URL}/sand.png`, 
     },
     OVERLAYS: {
         [TerrainType.FOREST]: [
             `${WESNOTH_BASE_URL}/terrain/forest/pine-tile.png`,
             `${WESNOTH_BASE_URL}/terrain/forest/deciduous-summer-tile.png`
-        ],
-        [TerrainType.JUNGLE]: `${WESNOTH_BASE_URL}/terrain/forest/rainforest-tile.png`,
-        [TerrainType.TAIGA]: `${WESNOTH_BASE_URL}/terrain/forest/snow-forest-tile.png`,
+        ], 
+        [TerrainType.JUNGLE]: `${WESNOTH_BASE_URL}/terrain/forest/rainforest-tile.png`, 
+        [TerrainType.TAIGA]: `${WESNOTH_BASE_URL}/terrain/forest/snow-forest-tile.png`, 
         [TerrainType.MOUNTAIN]: [
             `${WESNOTH_BASE_URL}/terrain/mountains/basic-tile.png`,
             `${WESNOTH_BASE_URL}/terrain/mountains/dry-tile.png`
-        ],
-        [TerrainType.VILLAGE]: `${WESNOTH_BASE_URL}/terrain/village/human-city-tile.png`, // Updated
-        [TerrainType.CASTLE]: `${WESNOTH_BASE_URL}/terrain/castle/castle.png`,
-        [TerrainType.RUINS]: `${WESNOTH_BASE_URL}/terrain/castle/ruin.png`,
+        ], 
+        [TerrainType.VILLAGE]: `${WESNOTH_BASE_URL}/terrain/village/human-city-tile.png`, 
+        [TerrainType.CASTLE]: `${WESNOTH_BASE_URL}/terrain/castle/castle.png`, 
+        [TerrainType.RUINS]: `${WESNOTH_BASE_URL}/terrain/castle/ruin.png`, 
         [TerrainType.FUNGUS]: `${WESNOTH_BASE_URL}/terrain/cave/fungus-tile.png`,
     },
     TEMPLE_ICON: `${WESNOTH_BASE_URL}/terrain/castle/outside-dwarven/dwarven-keep-tile.png`,
     PORTAL_ICON: `${WESNOTH_BASE_URL}/scenery/summoning-center.png`,
-
+    
     DECORATIONS: {
         GRASS_1: `${MC_BASE_URL}/fern.png`,
         FLOWER_1: `${MC_BASE_URL}/poppy.png`,
@@ -314,11 +317,49 @@ export const ASSETS = {
             `${WESNOTH_BASE_URL}/projectiles/fire-burst-small-2.png`,
             `${WESNOTH_BASE_URL}/projectiles/fire-burst-small-3.png`,
             `${WESNOTH_BASE_URL}/projectiles/fire-burst-small-4.png`,
+        ],
+        NATURE: [
+            `${WESNOTH_BASE_URL}/halo/elven/nature-halo1.png`,
+            `${WESNOTH_BASE_URL}/halo/elven/nature-halo2.png`,
+            `${WESNOTH_BASE_URL}/halo/elven/nature-halo3.png`
+        ],
+        // Added missing generic animations referenced by Spells
+        MAGIC: [
+            `${WESNOTH_BASE_URL}/halo/mage-preparation-1.png`,
+            `${WESNOTH_BASE_URL}/halo/mage-preparation-2.png`,
+            `${WESNOTH_BASE_URL}/halo/mage-preparation-3.png`,
+            `${WESNOTH_BASE_URL}/halo/mage-preparation-4.png`,
+            `${WESNOTH_BASE_URL}/halo/mage-preparation-5.png`,
+            `${WESNOTH_BASE_URL}/halo/mage-preparation-6.png`,
+            `${WESNOTH_BASE_URL}/halo/mage-preparation-7.png`,
+        ],
+        HOLY: [
+            `${WESNOTH_BASE_URL}/halo/illuminates-aura-1.png`,
+            `${WESNOTH_BASE_URL}/halo/illuminates-aura-2.png`,
+            `${WESNOTH_BASE_URL}/halo/illuminates-aura-3.png`,
+            `${WESNOTH_BASE_URL}/halo/illuminates-aura-4.png`,
+        ],
+        DARK: [
+            `${WESNOTH_BASE_URL}/halo/undead/dark-magic-1.png`,
+            `${WESNOTH_BASE_URL}/halo/undead/dark-magic-2.png`,
+            `${WESNOTH_BASE_URL}/halo/undead/dark-magic-3.png`,
+            `${WESNOTH_BASE_URL}/halo/undead/dark-magic-4.png`,
+            `${WESNOTH_BASE_URL}/halo/undead/dark-magic-5.png`,
+            `${WESNOTH_BASE_URL}/halo/undead/dark-magic-6.png`,
         ]
     }
 };
 
 export const getSprite = (race: CharacterRace, cls: CharacterClass): string => {
+    // USER REQUEST: Custom Sprite for Human Ranger via JSDelivr CDN
+    if (race === CharacterRace.HUMAN && cls === CharacterClass.RANGER) {
+        return "https://cdn.jsdelivr.net/gh/Leemonztuff/main@main/public/assets/custom/Human_Ranger.png";
+    }
+    // USER REQUEST: Custom Sprite for Human Paladin via JSDelivr CDN
+    if (race === CharacterRace.HUMAN && cls === CharacterClass.PALADIN) {
+        return "https://cdn.jsdelivr.net/gh/Leemonztuff/main@main/public/assets/custom/Humano_paladin.png";
+    }
+
     switch (race) {
         case CharacterRace.ELF: return ASSETS.UNITS.ELF_FIGHTER;
         case CharacterRace.DWARF: return ASSETS.UNITS.DWARF_FIGHTER;
@@ -328,8 +369,8 @@ export const getSprite = (race: CharacterRace, cls: CharacterClass): string => {
         case CharacterRace.TIEFLING: return ASSETS.UNITS.PLAYER_TIEFLING;
         case CharacterRace.HALF_ORC: return ASSETS.UNITS.PLAYER_HALF_ORC;
     }
-
-    switch (cls) {
+    
+    switch(cls) {
         case CharacterClass.WIZARD: return ASSETS.UNITS.PLAYER_WIZARD;
         case CharacterClass.ROGUE: return ASSETS.UNITS.PLAYER_ROGUE;
         case CharacterClass.CLERIC: return ASSETS.UNITS.PLAYER_CLERIC;
@@ -341,23 +382,14 @@ export const getSprite = (race: CharacterRace, cls: CharacterClass): string => {
         case CharacterClass.SORCERER: return ASSETS.UNITS.PLAYER_SORCERER;
         case CharacterClass.WARLOCK: return ASSETS.UNITS.PLAYER_WARLOCK;
     }
-
+    
     return ASSETS.UNITS.PLAYER_FIGHTER;
 };
 
 export const ITEMS: Record<string, Item> = {
-    POTION_HEALING: {
-        id: 'potion_healing', name: 'Healing Potion', type: 'consumable', rarity: ItemRarity.COMMON, description: 'Restores 2d4+2 HP.', icon: `${WESNOTH_BASE_URL}/items/potion-red.png`,
-        effects: [{ type: EffectType.HEAL, target: EffectTarget.SELF, diceCount: 2, diceSides: 4, baseAmount: 2, animationKey: 'HEAL' }]
-    },
-    POTION_MANA: {
-        id: 'potion_mana', name: 'Mana Potion', type: 'consumable', rarity: ItemRarity.UNCOMMON, description: 'Restores 1 Spell Slot.', icon: `${WESNOTH_BASE_URL}/items/potion-blue.png`,
-        effects: [{ type: EffectType.RESTORE_RESOURCE, resourceType: 'MANA', target: EffectTarget.SELF, baseAmount: 1, animationKey: 'HEAL' }]
-    },
-    POTION_STRENGTH: {
-        id: 'potion_strength', name: 'Potion of Giant Strength', type: 'consumable', rarity: ItemRarity.RARE, description: 'Increases STR temporarily.', icon: `${WESNOTH_BASE_URL}/items/potion-orange.png`,
-        effects: [{ type: EffectType.BUFF_STAT, statToModify: Ability.STR, target: EffectTarget.SELF, baseAmount: 2, duration: EffectDuration.ROUNDS, durationRounds: 5, animationKey: 'BUFF' }]
-    },
+    POTION_HEALING: { id: 'potion_healing', name: 'Healing Potion', type: 'consumable', rarity: ItemRarity.COMMON, description: 'Restores 2d4+2 HP.', icon: `${WESNOTH_BASE_URL}/items/potion-red.png`, effect: { type: 'heal_hp', amount: 0 } },
+    POTION_MANA: { id: 'potion_mana', name: 'Mana Potion', type: 'consumable', rarity: ItemRarity.UNCOMMON, description: 'Restores 1 Spell Slot.', icon: `${WESNOTH_BASE_URL}/items/potion-blue.png`, effect: { type: 'restore_mana', amount: 1 } },
+    POTION_STRENGTH: { id: 'potion_strength', name: 'Potion of Giant Strength', type: 'consumable', rarity: ItemRarity.RARE, description: 'Increases STR temporarily.', icon: `${WESNOTH_BASE_URL}/items/potion-orange.png`, effect: { type: 'buff_str', amount: 2 } },
     RATION: { id: 'ration', name: 'Ration', type: 'consumable', rarity: ItemRarity.COMMON, description: 'Used to camp and recover fatigue.', icon: `${WESNOTH_BASE_URL}/items/grain-sheaf.png` },
     LONGSWORD: { id: 'longsword', name: 'Longsword', type: 'equipment', rarity: ItemRarity.COMMON, description: 'Versatile melee weapon.', icon: `${WESNOTH_BASE_URL}/items/sword.png`, equipmentStats: { slot: EquipmentSlot.MAIN_HAND, damageType: DamageType.SLASHING, diceCount: 1, diceSides: 8 } },
     GREATAXE: { id: 'greataxe', name: 'Greataxe', type: 'equipment', rarity: ItemRarity.COMMON, description: 'Heavy melee weapon.', icon: `${WESNOTH_BASE_URL}/attacks/battleaxe.png`, equipmentStats: { slot: EquipmentSlot.MAIN_HAND, damageType: DamageType.SLASHING, diceCount: 1, diceSides: 12 } },
@@ -372,131 +404,121 @@ export const ITEMS: Record<string, Item> = {
     CHAIN_MAIL: { id: 'chain_mail', name: 'Chain Mail', type: 'equipment', rarity: ItemRarity.COMMON, description: 'Heavy armor (AC 16).', icon: `${WESNOTH_BASE_URL}/items/armor.png`, equipmentStats: { slot: EquipmentSlot.BODY, ac: 16 } },
     FLAME_TONGUE: { id: 'flame_tongue', name: 'Flame Tongue', type: 'equipment', rarity: ItemRarity.RARE, description: 'Magic sword that deals fire damage.', icon: `${WESNOTH_BASE_URL}/items/sword-flaming.png`, equipmentStats: { slot: EquipmentSlot.MAIN_HAND, damageType: DamageType.FIRE, diceCount: 2, diceSides: 6, properties: ['Magical'] } },
     VORPAL_SWORD: { id: 'vorpal_sword', name: 'Vorpal Sword', type: 'equipment', rarity: ItemRarity.LEGENDARY, description: '+3 Weapon. Decapitates on crit.', icon: `${WESNOTH_BASE_URL}/items/sword-holy.png`, equipmentStats: { slot: EquipmentSlot.MAIN_HAND, damageType: DamageType.SLASHING, diceCount: 1, diceSides: 8, properties: ['Magical'] }, flavorText: 'Snicker-snack!' },
-    SACRED_ELIXIR: {
-        id: 'sacred_elixir', name: 'Sacred Elixir', type: 'consumable', rarity: ItemRarity.LEGENDARY, description: 'Fully restores HP and cures corruption.', icon: `${WESNOTH_BASE_URL}/items/holy-water.png`, flavorText: 'Tears of a forgotten god.',
-        effects: [
-            { type: EffectType.HEAL, target: EffectTarget.SELF, baseAmount: 999, animationKey: 'HEAL' },
-            { type: EffectType.REMOVE_STATUS, target: EffectTarget.SELF, statusId: 'CORRUPTION' }
-        ]
+    SACRED_ELIXIR: { id: 'sacred_elixir', name: 'Sacred Elixir', type: 'consumable', rarity: ItemRarity.LEGENDARY, description: 'Fully restores HP and cures corruption.', icon: `${WESNOTH_BASE_URL}/items/holy-water.png`, flavorText: 'Tears of a forgotten god.' },
+    SHARD_OF_VECNA: { id: 'shard_of_vecna', name: 'Shard of Eternum', type: 'key', rarity: ItemRarity.LEGENDARY, description: 'A crystallized fragment of reality, pulsing with dark energy.', icon: `${WESNOTH_BASE_URL}/items/gem-large-blue.png`, flavorText: 'A piece of the broken world.' }
+};
+
+// --- SUMMONED UNIT DEFINITIONS ---
+export const SUMMON_DEFINITIONS: Record<string, EnemyDefinition> = {
+    'familiar_owl': {
+        id: 'familiar_owl', name: 'Owl Familiar', type: CreatureType.BEAST, sprite: ASSETS.UNITS.BAT, 
+        hp: 6, ac: 13, xpReward: 0, damage: 2, initiativeBonus: 3, attackDamageType: DamageType.PIERCING,
+        validDimensions: []
+    },
+    'spiritual_weapon': {
+        id: 'spiritual_weapon', name: 'Spiritual Weapon', type: CreatureType.CONSTRUCT, sprite: `${WESNOTH_BASE_URL}/items/hammer-runic.png`,
+        hp: 20, ac: 15, xpReward: 0, damage: 8, initiativeBonus: 0, attackDamageType: DamageType.FORCE,
+        immunities: [DamageType.POISON, DamageType.PSYCHIC],
+        validDimensions: []
+    },
+    'conjured_wolf': {
+        id: 'conjured_wolf', name: 'Spirit Wolf', type: CreatureType.BEAST, sprite: ASSETS.UNITS.WOLF,
+        hp: 18, ac: 13, xpReward: 0, damage: 7, initiativeBonus: 2, attackDamageType: DamageType.RADIANT,
+        validDimensions: []
+    },
+    'bear_form': {
+        id: 'bear_form', name: 'Bear', type: CreatureType.BEAST, sprite: ASSETS.UNITS.BEAR,
+        hp: 34, ac: 11, xpReward: 0, damage: 9, initiativeBonus: 0, attackDamageType: DamageType.SLASHING,
+        validDimensions: []
     }
 };
 
 export const SPELLS: Record<string, Spell> = {
-    'magic_missile': {
-        id: 'magic_missile', name: 'Magic Missile', level: 1, range: 6, type: SpellType.DAMAGE, description: 'Create 3 glowing darts of magical force.', animation: 'MAGIC', icon: `${WESNOTH_BASE_URL}/projectiles/magic-missile-n.png`,
-        effects: [{ type: EffectType.DAMAGE, target: EffectTarget.TARGET, damageType: DamageType.FORCE, diceCount: 3, diceSides: 4, animationKey: 'MAGIC' }]
-    },
-    'cure_wounds': {
-        id: 'cure_wounds', name: 'Cure Wounds', level: 1, range: 1, type: SpellType.HEAL, description: 'A creature you touch regains hit points.', animation: 'HEAL', icon: `${WESNOTH_BASE_URL}/halo/elven/druid-healing5.png`,
-        effects: [{ type: EffectType.HEAL, target: EffectTarget.TARGET, diceCount: 1, diceSides: 8, statScaling: Ability.WIS, animationKey: 'HEAL' }]
-    },
-    'fireball': {
-        id: 'fireball', name: 'Fireball', level: 3, range: 8, type: SpellType.DAMAGE, aoeRadius: 2, aoeType: 'CIRCLE', description: 'A bright streak flashes to a point you choose then blossoms.', animation: 'EXPLOSION', icon: `${WESNOTH_BASE_URL}/projectiles/fireball-n.png`,
-        effects: [{ type: EffectType.DAMAGE, target: EffectTarget.AREA, damageType: DamageType.FIRE, diceCount: 8, diceSides: 6, animationKey: 'EXPLOSION' }]
-    },
-    'guiding_bolt': {
-        id: 'guiding_bolt', name: 'Guiding Bolt', level: 1, range: 6, type: SpellType.DAMAGE, description: 'A flash of light streaks toward a creature.', animation: 'HOLY', icon: `${WESNOTH_BASE_URL}/projectiles/whitemissile-n.png`,
-        effects: [{ type: EffectType.DAMAGE, target: EffectTarget.TARGET, damageType: DamageType.RADIANT, diceCount: 4, diceSides: 6, animationKey: 'HOLY' }]
-    },
-    'healing_word': {
-        id: 'healing_word', name: 'Healing Word', level: 1, range: 6, type: SpellType.HEAL, description: 'A creature of your choice regains hit points. Bonus Action.', animation: 'HEAL', icon: `${WESNOTH_BASE_URL}/halo/elven/druid-healing5.png`,
-        effects: [{ type: EffectType.HEAL, target: EffectTarget.TARGET, diceCount: 1, diceSides: 4, statScaling: Ability.WIS, animationKey: 'HEAL' }]
-    }
+    'magic_missile': { id: 'magic_missile', name: 'Magic Missile', level: 1, range: 6, type: SpellType.DAMAGE, damageType: DamageType.FORCE, diceCount: 3, diceSides: 4, description: 'Create 3 glowing darts of magical force.', animation: 'MAGIC', icon: `${WESNOTH_BASE_URL}/projectiles/magic-missile-n.png` },
+    'cure_wounds': { id: 'cure_wounds', name: 'Cure Wounds', level: 1, range: 1, type: SpellType.HEAL, diceCount: 1, diceSides: 8, description: 'A creature you touch regains hit points.', animation: 'HEAL', icon: `${WESNOTH_BASE_URL}/halo/elven/druid-healing5.png` },
+    'fireball': { id: 'fireball', name: 'Fireball', level: 3, range: 8, type: SpellType.DAMAGE, damageType: DamageType.FIRE, diceCount: 8, diceSides: 6, aoeRadius: 2, aoeType: 'CIRCLE', description: 'A bright streak flashes to a point you choose then blossoms.', animation: 'EXPLOSION', icon: `${WESNOTH_BASE_URL}/projectiles/fireball-n.png` },
+    'guiding_bolt': { id: 'guiding_bolt', name: 'Guiding Bolt', level: 1, range: 6, type: SpellType.DAMAGE, damageType: DamageType.RADIANT, diceCount: 4, diceSides: 6, description: 'A flash of light streaks toward a creature.', animation: 'HOLY', icon: `${WESNOTH_BASE_URL}/projectiles/whitemissile-n.png` },
+    'healing_word': { id: 'healing_word', name: 'Healing Word', level: 1, range: 6, type: SpellType.HEAL, diceCount: 1, diceSides: 4, description: 'A creature of your choice regains hit points. Bonus Action.', animation: 'HEAL', icon: `${WESNOTH_BASE_URL}/halo/elven/druid-healing5.png` },
+    // NEW SUMMON SPELLS
+    'find_familiar': { id: 'find_familiar', name: 'Find Familiar', level: 1, range: 2, type: SpellType.SUMMON, diceCount: 0, diceSides: 0, description: 'Summon a spirit animal to aid you in combat.', animation: 'MAGIC', icon: `${WESNOTH_BASE_URL}/items/book2.png`, summonDefId: 'familiar_owl' },
+    'spiritual_weapon': { id: 'spiritual_weapon', name: 'Spiritual Weapon', level: 2, range: 4, type: SpellType.SUMMON, diceCount: 0, diceSides: 0, description: 'Create a floating spectral weapon.', animation: 'HOLY', icon: `${WESNOTH_BASE_URL}/items/hammer-runic.png`, summonDefId: 'spiritual_weapon' },
+    'conjure_animals': { id: 'conjure_animals', name: 'Conjure Animals', level: 3, range: 4, type: SpellType.SUMMON, diceCount: 0, diceSides: 0, description: 'Summon fey spirits in the form of beasts.', animation: 'HEAL', icon: `${WESNOTH_BASE_URL}/units/monsters/wolf.png`, summonDefId: 'conjured_wolf' }
 };
 
 export const SKILLS: Record<string, Skill> = {
-    'second_wind': {
-        id: 'second_wind', name: 'Second Wind', description: 'Regain HP.', staminaCost: 5, cooldown: 3, range: 0, isBonusAction: true, icon: '',
-        effects: [{ type: EffectType.HEAL, target: EffectTarget.SELF, diceCount: 1, diceSides: 10, baseAmount: 1, animationKey: 'HEAL' }]
-    },
-    'action_surge': {
-        id: 'action_surge', name: 'Action Surge', description: 'Take an additional action.', staminaCost: 10, cooldown: 5, range: 0, icon: '',
-        effects: [{ type: EffectType.MODIFY_ACTION, target: EffectTarget.SELF, baseAmount: 1, animationKey: 'BUFF' }]
-    },
-    'sneak_attack': {
-        id: 'sneak_attack', name: 'Sneak Attack', description: 'Deal extra damage to distracted enemies.', staminaCost: 0, cooldown: 0, range: 0, icon: '',
-        effects: [{ type: EffectType.DAMAGE, target: EffectTarget.TARGET, diceCount: 1, diceSides: 6, condition: 'HAS_ADVANTAGE' }]
-    },
-    'rage': {
-        id: 'rage', name: 'Rage', description: 'Advantage on STR, resistance to physical damage.', staminaCost: 5, cooldown: 10, range: 0, isBonusAction: true, icon: '',
-        effects: [{ type: EffectType.APPLY_STATUS, target: EffectTarget.SELF, statusId: 'RAGE', duration: EffectDuration.ROUNDS, durationRounds: 10, animationKey: 'BUFF' }]
-    },
-    'bardic_inspiration': {
-        id: 'bardic_inspiration', name: 'Bardic Inspiration', description: 'Grant an ally a bonus die.', staminaCost: 3, cooldown: 3, range: 6, isBonusAction: true, icon: '',
-        effects: [{ type: EffectType.APPLY_STATUS, target: EffectTarget.TARGET, statusId: 'BARDIC_INSPIRATION', duration: EffectDuration.ROUNDS, durationRounds: 10, animationKey: 'BUFF' }]
-    },
-    'wild_shape': {
-        id: 'wild_shape', name: 'Wild Shape', description: 'Transform into a beast.', staminaCost: 10, cooldown: 20, range: 0, icon: '',
-        effects: [{ type: EffectType.TRANSFORM, target: EffectTarget.SELF, summon: 'WOLF', duration: EffectDuration.PERMANENT, animationKey: 'BUFF' }]
-    },
-    'lay_on_hands': {
-        id: 'lay_on_hands', name: 'Lay on Hands', description: 'Heal a creature.', staminaCost: 5, cooldown: 5, range: 1, icon: '',
-        effects: [{ type: EffectType.HEAL, target: EffectTarget.TARGET, baseAmount: 5, statScaling: Ability.CHA, scalingFactor: 5, animationKey: 'HEAL' }]
-    },
-    'smite': {
-        id: 'smite', name: 'Divine Smite', description: 'Expend spell slot for radiant damage.', staminaCost: 0, cooldown: 0, range: 0, icon: '',
-        effects: [{ type: EffectType.DAMAGE, target: EffectTarget.TARGET, damageType: DamageType.RADIANT, diceCount: 2, diceSides: 8, animationKey: 'HOLY' }]
-    },
-    'misty_step': {
-        id: 'misty_step', name: 'Misty Step', description: 'Teleport 6 tiles.', staminaCost: 5, cooldown: 3, range: 6, isBonusAction: true, icon: '',
-        effects: [{ type: EffectType.TELEPORT, target: EffectTarget.SELF, range: 6, animationKey: 'MAGIC' }]
-    }
-};
-
-export const CLASS_TREES: Record<CharacterClass, ProgressionNode[]> = {
-    [CharacterClass.FIGHTER]: [
-        { level: 1, featureName: 'Fighting Style', description: 'Specialized combat training.', passiveEffect: 'FIGHTING_STYLE' },
-        { level: 1, featureName: 'Second Wind', description: 'Heal yourself in battle.', unlocksSkill: 'second_wind' },
-        { level: 2, featureName: 'Action Surge', description: 'Act twice in a turn.', unlocksSkill: 'action_surge' },
-        { level: 5, featureName: 'Extra Attack', description: 'Attack twice per action.', passiveEffect: 'EXTRA_ATTACK' }
-    ],
-    [CharacterClass.ROGUE]: [
-        { level: 1, featureName: 'Sneak Attack', description: 'Extra damage on advantage.', passiveEffect: 'SNEAK_ATTACK' },
-        { level: 2, featureName: 'Cunning Action', description: 'Dash/Disengage as bonus.', unlocksSkill: 'cunning_action' } // Placeholder skill
-    ],
-    [CharacterClass.WIZARD]: [
-        { level: 1, featureName: 'Spellcasting', description: 'Cast wizard spells.', unlocksSpell: 'magic_missile' },
-        { level: 5, featureName: 'Fireball', description: 'Explosive fire magic.', unlocksSpell: 'fireball' }
-    ],
-    [CharacterClass.CLERIC]: [
-        { level: 1, featureName: 'Spellcasting', description: 'Cast cleric spells.', unlocksSpell: 'cure_wounds' },
-        { level: 1, featureName: 'Guiding Bolt', description: 'Radiant damage.', unlocksSpell: 'guiding_bolt' }
-    ],
-    [CharacterClass.BARBARIAN]: [
-        { level: 1, featureName: 'Rage', description: 'Enter a battle frenzy.', unlocksSkill: 'rage' }
-    ],
-    [CharacterClass.PALADIN]: [
-        { level: 1, featureName: 'Lay on Hands', description: 'Healing touch.', unlocksSkill: 'lay_on_hands' },
-        { level: 2, featureName: 'Divine Smite', description: 'Radiant weapon strikes.', unlocksSkill: 'smite' }
-    ],
-    [CharacterClass.RANGER]: [
-        { level: 2, featureName: 'Spellcasting', description: 'Nature magic.', unlocksSpell: 'cure_wounds' },
-        { level: 2, featureName: 'Hunters Mark', description: 'Mark foes for damage.', unlocksSpell: 'hunters_mark' } // Placeholder
-    ],
-    [CharacterClass.BARD]: [
-        { level: 1, featureName: 'Bardic Inspiration', description: 'Inspire allies.', unlocksSkill: 'bardic_inspiration' },
-        { level: 1, featureName: 'Healing Word', description: 'Ranged healing.', unlocksSpell: 'healing_word' }
-    ],
-    [CharacterClass.DRUID]: [
-        { level: 1, featureName: 'Spellcasting', description: 'Nature magic.', unlocksSpell: 'cure_wounds' },
-        { level: 2, featureName: 'Wild Shape', description: 'Transform into beasts.', unlocksSkill: 'wild_shape' }
-    ],
-    [CharacterClass.SORCERER]: [
-        { level: 1, featureName: 'Spellcasting', description: 'Innate magic.', unlocksSpell: 'magic_missile' }
-    ],
-    [CharacterClass.WARLOCK]: [
-        { level: 1, featureName: 'Pact Magic', description: 'Eldritch power.', unlocksSpell: 'eldritch_blast' }, // Placeholder
-        { level: 3, featureName: 'Misty Step', description: 'Teleport.', unlocksSkill: 'misty_step' }
-    ]
+    'second_wind': { id: 'second_wind', name: 'Second Wind', description: 'Regain HP.', staminaCost: 5, cooldown: 3, range: 0, damageMultiplier: 0, effect: 'HEAL_SELF', isBonusAction: true, icon: '' },
+    'action_surge': { id: 'action_surge', name: 'Action Surge', description: 'Take an additional action.', staminaCost: 10, cooldown: 5, range: 0, damageMultiplier: 0, effect: 'ACTION_RESET', icon: '' },
+    'sneak_attack': { id: 'sneak_attack', name: 'Sneak Attack', description: 'Deal extra damage to distracted enemies.', staminaCost: 0, cooldown: 0, range: 0, damageMultiplier: 0, effect: 'PASSIVE', icon: '' },
+    'rage': { id: 'rage', name: 'Rage', description: 'Advantage on STR, resistance to physical damage.', staminaCost: 5, cooldown: 10, range: 0, damageMultiplier: 0, effect: 'APPLY_EFFECT', statusEffect: 'RAGE', isBonusAction: true, icon: '' },
+    'bardic_inspiration': { id: 'bardic_inspiration', name: 'Bardic Inspiration', description: 'Grant an ally a bonus die.', staminaCost: 3, cooldown: 3, range: 6, damageMultiplier: 0, effect: 'APPLY_EFFECT', statusEffect: 'BARDIC', isBonusAction: true, icon: '' },
+    'wild_shape': { id: 'wild_shape', name: 'Wild Shape', description: 'Transform into a Bear. Gain temporary HP.', staminaCost: 10, cooldown: 20, range: 0, damageMultiplier: 0, effect: 'TRANSFORM', summonDefId: 'bear_form', animation: 'NATURE', icon: `${WESNOTH_BASE_URL}/units/monsters/bear.png` },
+    'lay_on_hands': { id: 'lay_on_hands', name: 'Lay on Hands', description: 'Heal a creature.', staminaCost: 5, cooldown: 1, range: 1, damageMultiplier: 0, effect: 'HEAL_SELF', icon: `${WESNOTH_BASE_URL}/halo/elven/druid-healing5.png` },
+    'smite': { id: 'smite', name: 'Divine Smite', description: 'Deal radiant damage.', staminaCost: 5, cooldown: 0, range: 1, damageMultiplier: 2, damageType: DamageType.RADIANT, effect: 'DAMAGE', icon: `${WESNOTH_BASE_URL}/projectiles/whitemissile-n.png` },
+    'sneak': { id: 'sneak', name: 'Stealth', description: 'Hide from enemies.', staminaCost: 5, cooldown: 3, range: 0, damageMultiplier: 0, effect: 'APPLY_EFFECT', statusEffect: 'STEALTH', icon: '' },
+    'hunters_mark': { id: 'hunters_mark', name: 'Hunter\'s Mark', description: 'Mark an enemy for extra damage.', staminaCost: 5, cooldown: 0, range: 6, damageMultiplier: 0, effect: 'APPLY_EFFECT', statusEffect: 'HUNTERS_MARK', isBonusAction: true, icon: '' },
+    'taunt': { id: 'taunt', name: 'Taunt', description: 'Force enemies to attack you.', staminaCost: 5, cooldown: 3, range: 3, damageMultiplier: 0, effect: 'APPLY_EFFECT', statusEffect: 'TAUNT', icon: '' },
+    'mass_heal': { id: 'mass_heal', name: 'Mass Heal', description: 'Heal all allies.', staminaCost: 20, cooldown: 5, range: 10, damageMultiplier: 0, effect: 'HEAL_SELF', aoeRadius: 3, aoeType: 'CIRCLE', icon: `${WESNOTH_BASE_URL}/halo/elven/druid-healing5.png` }
 };
 
 export const RACE_SKILLS: Record<CharacterRace, string[]> = {
     [CharacterRace.HUMAN]: [],
-    [CharacterRace.ELF]: [], // Could add Perception proficiency
+    [CharacterRace.ELF]: [],
     [CharacterRace.DWARF]: [],
-    [CharacterRace.HALFLING]: [], // Lucky is passive
-    [CharacterRace.DRAGONBORN]: ['breath_weapon'], // Placeholder
+    [CharacterRace.HALFLING]: ['sneak'],
+    [CharacterRace.DRAGONBORN]: [],
     [CharacterRace.GNOME]: [],
-    [CharacterRace.TIEFLING]: ['hellish_rebuke'], // Placeholder
+    [CharacterRace.TIEFLING]: [],
     [CharacterRace.HALF_ORC]: []
+};
+
+// Updated Progression Trees with new Summons
+export const CLASS_TREES: Record<CharacterClass, ProgressionNode[]> = {
+    [CharacterClass.FIGHTER]: [
+        { level: 1, featureName: 'Fighting Style', description: 'You are skilled in combat.', unlocksSkill: 'second_wind' },
+        { level: 2, featureName: 'Action Surge', description: 'Take an extra action.', unlocksSkill: 'action_surge' },
+        { level: 5, featureName: 'Extra Attack', description: 'Attack twice.', passiveEffect: 'EXTRA_ATTACK' }
+    ],
+    [CharacterClass.RANGER]: [
+        { level: 1, featureName: 'Favored Enemy', description: 'Bonus damage to specific foes.', unlocksSkill: 'hunters_mark' },
+        { level: 5, featureName: 'Extra Attack', description: 'Attack twice.', passiveEffect: 'EXTRA_ATTACK' }
+    ],
+    [CharacterClass.WIZARD]: [
+        { level: 1, featureName: 'Arcane Recovery', description: 'Recover slots.', unlocksSpell: 'magic_missile' },
+        { level: 1, featureName: 'Find Familiar', description: 'Summon a spirit ally.', unlocksSpell: 'find_familiar' },
+        { level: 3, featureName: 'Fireball', description: 'Explosive magic.', unlocksSpell: 'fireball' }
+    ],
+    [CharacterClass.CLERIC]: [
+        { level: 1, featureName: 'Life Domain', description: 'Better healing.', unlocksSpell: 'cure_wounds' },
+        { level: 1, featureName: 'Guiding Bolt', description: 'Radiant damage.', unlocksSpell: 'guiding_bolt' },
+        { level: 3, featureName: 'Spiritual Weapon', description: 'Summon a floating weapon.', unlocksSpell: 'spiritual_weapon' }
+    ],
+    [CharacterClass.ROGUE]: [
+        { level: 1, featureName: 'Sneak Attack', description: 'Deal extra damage.' },
+        { level: 2, featureName: 'Cunning Action', description: 'Dash, Disengage, or Hide as bonus.', unlocksSkill: 'sneak' }
+    ],
+    [CharacterClass.BARBARIAN]: [
+        { level: 1, featureName: 'Rage', description: 'Enter a rage.', unlocksSkill: 'rage' },
+        { level: 5, featureName: 'Extra Attack', description: 'Attack twice.', passiveEffect: 'EXTRA_ATTACK' }
+    ],
+    [CharacterClass.PALADIN]: [
+        { level: 1, featureName: 'Lay on Hands', description: 'Heal.', unlocksSkill: 'lay_on_hands' },
+        { level: 2, featureName: 'Divine Smite', description: 'Deal radiant damage.', unlocksSkill: 'smite' },
+        { level: 5, featureName: 'Extra Attack', description: 'Attack twice.', passiveEffect: 'EXTRA_ATTACK' }
+    ],
+    [CharacterClass.SORCERER]: [
+        { level: 1, featureName: 'Magic Missile', description: 'Force damage.', unlocksSpell: 'magic_missile' },
+        { level: 3, featureName: 'Fireball', description: 'AoE Fire.', unlocksSpell: 'fireball' }
+    ],
+    [CharacterClass.WARLOCK]: [
+        { level: 1, featureName: 'Eldritch Blast', description: 'Force damage.', unlocksSpell: 'magic_missile' }
+    ],
+    [CharacterClass.DRUID]: [
+        { level: 1, featureName: 'Druidic Circle', description: 'Heal.', unlocksSpell: 'cure_wounds' },
+        { level: 2, featureName: 'Wild Shape', description: 'Transform.', unlocksSkill: 'wild_shape' },
+        { level: 3, featureName: 'Conjure Animals', description: 'Summon beasts.', unlocksSpell: 'conjure_animals' }
+    ],
+    [CharacterClass.BARD]: [
+        { level: 1, featureName: 'Bardic Inspiration', description: 'Inspire others.', unlocksSkill: 'bardic_inspiration' },
+        { level: 1, featureName: 'Healing Word', description: 'Heal from distance.', unlocksSpell: 'healing_word' }
+    ]
 };

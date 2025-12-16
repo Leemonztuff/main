@@ -1,14 +1,15 @@
 
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { ITEMS, RARITY_COLORS } from '../constants';
+import { useContentStore } from '../store/contentStore';
+import { RARITY_COLORS } from '../constants';
 import { Item, ItemRarity } from '../types';
 import { sfx } from '../services/SoundSystem';
 
-// Helper for random shop items
-const generateShopItems = (level: number) => {
-    // Return a random selection of 6 items from constants
-    const allItems = Object.values(ITEMS).filter(i => i.type !== 'key');
+// Helper for random shop items - now accepts dynamic DB
+const generateShopItems = (level: number, itemDB: Record<string, Item>) => {
+    // Return a random selection of 6 items from DB
+    const allItems = Object.values(itemDB).filter(i => i.type !== 'key');
     const shuffled = allItems.sort(() => 0.5 - Math.random());
     return shuffled.slice(0, 6).map(item => ({
         item,
@@ -16,21 +17,6 @@ const generateShopItems = (level: number) => {
     }));
 };
 
-export const TownServices: React.FC = () => {
-    const { 
-        playerPos, townMapData, gold, spendGold, addItem, party, recalculateStats, addLog
-    } = useGameStore();
-
-    const [activeService, setActiveService] = useState<'NONE' | 'INN' | 'SHOP'>('NONE');
-    const [shopStock] = useState(() => generateShopItems(party[0]?.stats.level || 1));
-
-    // Determine if we are on a POI
-    const currentTile = townMapData?.find(c => c.q === playerPos.x && c.r === playerPos.y);
-    
-    return null; // Logic moved to App/UI integration via Store update below.
-};
-
-// Re-implementing correctly below in a way that integrates with the existing system.
 const ShopModal = ({ onClose, gold, spendGold, addItem, stock }: any) => (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in zoom-in-95">
         <div className="bg-slate-900 border border-amber-600/50 rounded-xl w-full max-w-4xl h-[80vh] flex flex-col shadow-2xl relative overflow-hidden">
@@ -68,9 +54,9 @@ const ShopModal = ({ onClose, gold, spendGold, addItem, stock }: any) => (
                                 onClick={() => {
                                     if (spendGold(entry.price)) {
                                         addItem(entry.item);
-                                        sfx.playUiClick(); // Cha-ching?
+                                        sfx.playUiClick();
                                     } else {
-                                        sfx.playUiHover(); // Error sound
+                                        sfx.playUiHover();
                                     }
                                 }}
                                 disabled={gold < entry.price}
@@ -136,8 +122,10 @@ const InnModal = ({ onClose, gold, spendGold, party, healParty }: any) => {
 
 export const TownServicesManager = ({ activeService, onClose }: any) => {
     const { gold, spendGold, addItem, party, recalculateStats, addLog, saveGame } = useGameStore();
-    // Memoize stock so it doesn't change on re-renders, simple random logic
-    const [stock] = useState(() => generateShopItems(party[0]?.stats.level || 1));
+    const items = useContentStore(state => state.items);
+    
+    // Generate shop items using dynamic content store
+    const [stock] = useState(() => generateShopItems(party[0]?.stats.level || 1, items));
 
     const healParty = () => {
         const store = useGameStore.getState();

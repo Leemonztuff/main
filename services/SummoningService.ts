@@ -1,6 +1,7 @@
 
 import { CharacterClass, CharacterRace, Attributes, ItemRarity, DamageType, Ability, CombatStatsComponent } from '../types';
-import { BASE_STATS, RACE_BONUS, CLASS_TREES, RACE_SKILLS } from '../constants';
+import { RACE_BONUS, CLASS_TREES, RACE_SKILLS } from '../constants';
+import { useContentStore } from '../store/contentStore';
 import { rollDice, getModifier } from './dndRules';
 
 // --- HASHING UTILS ---
@@ -66,6 +67,9 @@ export const SummoningService = {
         const hash = fnv1a(rawData);
         const rng = new SeededRNG(hash);
 
+        // Access Dynamic Class Stats
+        const classStats = useContentStore.getState().classStats;
+
         // 1. Determine Rarity (Weighted)
         const roll = rng.next() * 100; // 0-100
         let rarity = ItemRarity.COMMON;
@@ -83,8 +87,9 @@ export const SummoningService = {
         // 3. Name Generation
         const name = rng.pick(NAMES_PREFIX) + rng.pick(NAMES_SUFFIX);
 
-        // 4. Base Attributes Generation
-        const base = { ...BASE_STATS[cls] };
+        // 4. Base Attributes Generation (Dynamic)
+        // Fallback to empty object if classStats missing (shouldn't happen if store initialized)
+        const base = { ...(classStats[cls] || { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 }) };
         const raceBonus = RACE_BONUS[race];
         
         // Add Racial Bonuses

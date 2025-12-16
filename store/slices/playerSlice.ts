@@ -2,9 +2,10 @@
 import { StateCreator } from 'zustand';
 import { CharacterRace, CharacterClass, Attributes, Difficulty, EquipmentSlot, Item, Ability, Entity, CombatStatsComponent, VisualComponent, Dimension, GameState, CreatureType, ItemRarity } from '../../types';
 import { calculateHp, getModifier, calculateVisionRange, getCorruptionPenalty, rollDice } from '../../services/dndRules';
-import { BASE_STATS, RACE_BONUS, XP_TABLE, ITEMS, getSprite, CLASS_TREES, RACE_SKILLS } from '../../constants';
+import { BASE_STATS, RACE_BONUS, XP_TABLE, getSprite, CLASS_TREES, RACE_SKILLS } from '../../constants';
 import { sfx } from '../../services/SoundSystem';
 import { SummoningService } from '../../services/SummoningService';
+import { useContentStore } from '../contentStore';
 
 export interface PlayerSlice {
   party: (Entity & { stats: CombatStatsComponent, visual: VisualComponent })[];
@@ -21,7 +22,7 @@ export interface PlayerSlice {
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const getCasterSlots = (cls: CharacterClass, level: number) => {
-    if ([CharacterClass.WIZARD, CharacterClass.CLERIC, CharacterClass.DRUID, CharacterClass.SORCERER, CharacterClass.BARD].includes(cls)) return { current: level + 1, max: level + 1 }; // Simple scaling for MVP
+    if ([CharacterClass.WIZARD, CharacterClass.CLERIC, CharacterClass.DRUID, CharacterClass.SORCERER, CharacterClass.BARD].includes(cls)) return { current: level + 1, max: level + 1 }; 
     if (cls === CharacterClass.WARLOCK) return { current: Math.ceil(level/2), max: Math.ceil(level/2) };
     if ([CharacterClass.PALADIN, CharacterClass.RANGER].includes(cls)) return { current: Math.floor(level/2), max: Math.floor(level/2) };
     return { current: 0, max: 0 };
@@ -37,6 +38,153 @@ const getHitDie = (cls: CharacterClass) => {
 const calculateMaxStamina = (con: number, level: number) => {
     return 10 + getModifier(con) + Math.floor(level / 2);
 }
+
+// --- STATS PIPELINE STRATEGIES ---
+
+type StatModifier = (stats: CombatStatsComponent, entity: Entity) => CombatStatsComponent;
+
+const BaseStatsModifier: StatModifier = (stats, entity) => {
+    // Recalculate basics derived from Attributes and Level
+    const conMod = getModifier(stats.attributes.CON);
+    const hitDie = getHitDie(stats.class);
+    
+    // Base HP calculation
+    const baseHp = calculateHp(stats.level, stats.attributes.CON, hitDie, stats.race);
+    
+    // Base Stamina
+    const baseStamina = calculateMaxStamina(stats.attributes.CON, stats.level);
+
+    return {
+        ...stats,
+        maxHp: baseHp,
+        maxStamina: baseStamina,
+        initiativeBonus: getModifier(stats.attributes.DEX)
+    };
+};
+
+const RaceModifier: StatModifier = (stats, entity) => {
+    let speed = 30;
+    let staminaBonus = 0;
+
+    switch (stats.race) {
+        case CharacterRace.ELF: 
+            speed = 35; 
+            break;
+        case CharacterRace.DWARF: 
+        case CharacterRace.HALFLING: 
+            speed = 25; 
+            break;
+        case CharacterRace.HUMAN:
+            staminaBonus = 3;
+            break;
+    }
+
+    return {
+        ...stats,
+        speed,
+        maxStamina: stats.maxStamina + staminaBonus
+    };
+};
+
+const EquipmentModifier: StatModifier = (stats, entity) => {
+    let armorAc = 10; // Base unarmored
+    let shieldBonus = 0;
+    let attributeBonuses: Partial<Attributes> = {};
+
+    Object.values(entity.equipment || {}).forEach((item: any) => {
+        if (!item || !item.equipmentStats) return;
+        
+        // Attributes (e.g. Belt of Giant Strength)
+        if (item.equipmentStats.modifiers) {
+            Object.entries(item.equipmentStats.modifiers).forEach(([key, val]) => { 
+                if (val) attributeBonuses[key as keyof Attributes] = (attributeBonuses[key as keyof Attributes] || 0) + (val as number); 
+            });
+        }
+        
+        // AC
+        if (item.equipmentStats.slot === EquipmentSlot.BODY && item.equipmentStats.ac) {
+            armorAc = item.equipmentStats.ac;
+        }
+        if (item.equipmentStats.slot === EquipmentSlot.OFF_HAND && item.equipmentStats.ac) {
+            shieldBonus = item.equipmentStats.ac;
+        }
+    });
+
+    // Apply Attribute bonuses first as they affect DEX mod
+    const newAttributes = { ...stats.attributes };
+    Object.entries(attributeBonuses).forEach(([k, v]) => {
+        // @ts-ignore
+        newAttributes[k] += v;
+    });
+
+    // Calculate AC with Armor rules
+    let dexMod = getModifier(newAttributes.DEX);
+    if (armorAc >= 16) dexMod = 0; // Heavy Armor: No Dex
+    else if (armorAc >= 13) dexMod = Math.min(2, dexMod); // Medium Armor: Max 2 Dex
+
+    return {
+        ...stats,
+        attributes: newAttributes,
+        ac: armorAc + dexMod + shieldBonus
+    };
+};
+
+const ClassModifier: StatModifier = (stats, entity) => {
+    let acBonus = 0;
+    
+    // Fighter Defense Style: +1 AC if wearing armor
+    const hasArmor = entity.equipment?.[EquipmentSlot.BODY] !== undefined;
+    if (stats.class === CharacterClass.FIGHTER && hasArmor) {
+        acBonus += 1;
+    }
+
+    // Barbarian Unarmored Defense (CON to AC) if no armor
+    if (stats.class === CharacterClass.BARBARIAN && !hasArmor) {
+        const conMod = getModifier(stats.attributes.CON);
+        acBonus += conMod;
+    }
+
+    // Monk Unarmored Defense (WIS to AC) if no armor (Future proofing)
+    // if (stats.class === 'MONK' && !hasArmor) acBonus += getModifier(stats.attributes.WIS);
+
+    return {
+        ...stats,
+        ac: stats.ac + acBonus
+    };
+};
+
+const EffectModifier: StatModifier = (stats, entity) => {
+    // Corruption Penalties
+    const { acPenalty, maxHpPenalty } = getCorruptionPenalty(stats.corruption || 0);
+    
+    // Status Effects
+    let acBonus = 0;
+    if (stats.statusEffects?.['SHIELD']) acBonus += 5;
+    if (stats.statusEffects?.['STONE_SKIN']) acBonus += 2;
+
+    return {
+        ...stats,
+        ac: Math.max(0, stats.ac + acBonus - acPenalty),
+        maxHp: Math.max(1, stats.maxHp - maxHpPenalty)
+    };
+};
+
+// Pipeline runner
+const runStatsPipeline = (entity: Entity & { stats: CombatStatsComponent }): CombatStatsComponent => {
+    // Reset attributes to base before recalculating to avoid infinite stacking
+    const initialStats = { ...entity.stats, attributes: { ...entity.stats.baseAttributes } };
+    
+    const modifiers = [
+        BaseStatsModifier,
+        RaceModifier,
+        EquipmentModifier,
+        ClassModifier,
+        EffectModifier
+    ];
+
+    return modifiers.reduce((currentStats, modifier) => modifier(currentStats, entity), initialStats);
+};
+
 
 // Helper to get features unlocked up to a certain level
 const getUnlockedFeatures = (cls: CharacterClass, race: CharacterRace, level: number) => {
@@ -62,6 +210,9 @@ const getUnlockedFeatures = (cls: CharacterClass, race: CharacterRace, level: nu
 };
 
 const generateCompanion = (name: string, race: CharacterRace, cls: CharacterClass, level: number): (Entity & { stats: CombatStatsComponent, visual: VisualComponent }) => {
+    const contentState = useContentStore.getState();
+    const items = contentState.items;
+
     const baseStats = { ...BASE_STATS[cls] };
     const bonus = RACE_BONUS[race];
     (Object.keys(baseStats) as Ability[]).forEach(k => { if (bonus[k]) baseStats[k] += bonus[k]!; });
@@ -69,12 +220,18 @@ const generateCompanion = (name: string, race: CharacterRace, cls: CharacterClas
     const maxStamina = calculateMaxStamina(baseStats.CON, level);
     
     const equipment: Partial<Record<EquipmentSlot, Item>> = {};
-    if (cls === CharacterClass.FIGHTER || cls === CharacterClass.PALADIN) { equipment[EquipmentSlot.MAIN_HAND] = ITEMS.LONGSWORD; equipment[EquipmentSlot.BODY] = ITEMS.CHAIN_MAIL; equipment[EquipmentSlot.OFF_HAND] = ITEMS.SHIELD; } 
-    else if (cls === CharacterClass.BARBARIAN) { equipment[EquipmentSlot.MAIN_HAND] = ITEMS.GREATAXE; } 
-    else if (cls === CharacterClass.ROGUE) { equipment[EquipmentSlot.MAIN_HAND] = ITEMS.DAGGER; equipment[EquipmentSlot.BODY] = ITEMS.LEATHER_ARMOR; } 
-    else if (cls === CharacterClass.CLERIC) { equipment[EquipmentSlot.MAIN_HAND] = ITEMS.MACE; equipment[EquipmentSlot.BODY] = ITEMS.CHAIN_SHIRT; equipment[EquipmentSlot.OFF_HAND] = ITEMS.SHIELD; } 
-    else if (cls === CharacterClass.RANGER) { equipment[EquipmentSlot.MAIN_HAND] = ITEMS.SHORTSWORD; equipment[EquipmentSlot.OFF_HAND] = ITEMS.DAGGER; equipment[EquipmentSlot.BODY] = ITEMS.LEATHER_ARMOR; }
-    else { equipment[EquipmentSlot.MAIN_HAND] = ITEMS.QUARTERSTAFF; }
+    
+    // Dynamic Item Lookup
+    if (cls === CharacterClass.FIGHTER || cls === CharacterClass.PALADIN) { 
+        equipment[EquipmentSlot.MAIN_HAND] = items['longsword']; 
+        equipment[EquipmentSlot.BODY] = items['chain_mail']; 
+        equipment[EquipmentSlot.OFF_HAND] = items['shield']; 
+    } 
+    else if (cls === CharacterClass.BARBARIAN) { equipment[EquipmentSlot.MAIN_HAND] = items['greataxe']; } 
+    else if (cls === CharacterClass.ROGUE) { equipment[EquipmentSlot.MAIN_HAND] = items['dagger']; equipment[EquipmentSlot.BODY] = items['leather_armor']; } 
+    else if (cls === CharacterClass.CLERIC) { equipment[EquipmentSlot.MAIN_HAND] = items['mace']; equipment[EquipmentSlot.BODY] = items['chain_shirt']; equipment[EquipmentSlot.OFF_HAND] = items['shield']; } 
+    else if (cls === CharacterClass.RANGER) { equipment[EquipmentSlot.MAIN_HAND] = items['shortsword']; equipment[EquipmentSlot.OFF_HAND] = items['dagger']; equipment[EquipmentSlot.BODY] = items['leather_armor']; }
+    else { equipment[EquipmentSlot.MAIN_HAND] = items['quarterstaff']; }
 
     const { skills, spells, maxActions } = getUnlockedFeatures(cls, race, level);
 
@@ -97,20 +254,23 @@ export const createPlayerSlice: StateCreator<any, [], [], PlayerSlice> = (set, g
 
   createCharacter: (name, race, cls, stats, difficulty) => {
     sfx.playVictory();
+    const contentState = useContentStore.getState();
+    const items = contentState.items;
+
     const maxHp = calculateHp(1, stats.CON, getHitDie(cls), race);
     const maxStamina = calculateMaxStamina(stats.CON, 1);
     const startSlots = getCasterSlots(cls, 1);
     let spriteUrl = getSprite(race, cls);
     const equipment: Partial<Record<EquipmentSlot, Item>> = {};
-    const inventory = [{ item: ITEMS.POTION_HEALING, quantity: 3 }, { item: ITEMS.RATION, quantity: 5 }];
+    const inventory = [{ item: items['potion_healing'], quantity: 3 }, { item: items['ration'], quantity: 5 }];
 
     switch (cls) {
-        case CharacterClass.FIGHTER: case CharacterClass.PALADIN: equipment[EquipmentSlot.MAIN_HAND] = ITEMS.LONGSWORD; equipment[EquipmentSlot.BODY] = ITEMS.CHAIN_MAIL; equipment[EquipmentSlot.OFF_HAND] = ITEMS.SHIELD; break;
-        case CharacterClass.BARBARIAN: equipment[EquipmentSlot.MAIN_HAND] = ITEMS.GREATAXE; break;
-        case CharacterClass.RANGER: equipment[EquipmentSlot.MAIN_HAND] = ITEMS.SHORTSWORD; equipment[EquipmentSlot.OFF_HAND] = ITEMS.DAGGER; equipment[EquipmentSlot.BODY] = ITEMS.LEATHER_ARMOR; break;
-        case CharacterClass.ROGUE: equipment[EquipmentSlot.MAIN_HAND] = ITEMS.DAGGER; equipment[EquipmentSlot.BODY] = ITEMS.LEATHER_ARMOR; break;
-        case CharacterClass.CLERIC: equipment[EquipmentSlot.MAIN_HAND] = ITEMS.MACE; equipment[EquipmentSlot.BODY] = ITEMS.CHAIN_SHIRT; equipment[EquipmentSlot.OFF_HAND] = ITEMS.SHIELD; inventory.push({ item: ITEMS.POTION_MANA, quantity: 1 }); break;
-        default: equipment[EquipmentSlot.MAIN_HAND] = ITEMS.QUARTERSTAFF; inventory.push({ item: ITEMS.POTION_MANA, quantity: 2 });
+        case CharacterClass.FIGHTER: case CharacterClass.PALADIN: equipment[EquipmentSlot.MAIN_HAND] = items['longsword']; equipment[EquipmentSlot.BODY] = items['chain_mail']; equipment[EquipmentSlot.OFF_HAND] = items['shield']; break;
+        case CharacterClass.BARBARIAN: equipment[EquipmentSlot.MAIN_HAND] = items['greataxe']; break;
+        case CharacterClass.RANGER: equipment[EquipmentSlot.MAIN_HAND] = items['shortsword']; equipment[EquipmentSlot.OFF_HAND] = items['dagger']; equipment[EquipmentSlot.BODY] = items['leather_armor']; break;
+        case CharacterClass.ROGUE: equipment[EquipmentSlot.MAIN_HAND] = items['dagger']; equipment[EquipmentSlot.BODY] = items['leather_armor']; break;
+        case CharacterClass.CLERIC: equipment[EquipmentSlot.MAIN_HAND] = items['mace']; equipment[EquipmentSlot.BODY] = items['chain_shirt']; equipment[EquipmentSlot.OFF_HAND] = items['shield']; inventory.push({ item: items['potion_mana'], quantity: 1 }); break;
+        default: equipment[EquipmentSlot.MAIN_HAND] = items['quarterstaff']; inventory.push({ item: items['potion_mana'], quantity: 2 });
     }
 
     const { skills, spells, maxActions } = getUnlockedFeatures(cls, race, 1);
@@ -150,8 +310,13 @@ export const createPlayerSlice: StateCreator<any, [], [], PlayerSlice> = (set, g
     exploredNormal.add(`${startX},${startY}`);
 
     const startQuests = [
-        { id: 'q1', title: 'The Capital', description: 'Find the great castle at coordinates (0, 0).', completed: false, type: 'MAIN' as const },
-        { id: 'q2', title: 'Explore the Wilds', description: 'Discover 50 unique locations in Arcadia.', completed: false, type: 'SIDE' as const }
+        { 
+            id: 'vecna_1', 
+            title: 'The Thinning Veil', 
+            description: 'Travel to the ruins at [0,0] where reality is fracturing.', 
+            completed: false, 
+            type: 'MAIN' as const 
+        }
     ];
 
     set({ 
@@ -170,6 +335,9 @@ export const createPlayerSlice: StateCreator<any, [], [], PlayerSlice> = (set, g
   },
 
   summonCharacter: (seed, method) => {
+      const contentState = useContentStore.getState();
+      const items = contentState.items;
+
       // 1. Generate Metadata using the new Service
       const summonData = SummoningService.generateFromSeed(seed);
       
@@ -192,11 +360,11 @@ export const createPlayerSlice: StateCreator<any, [], [], PlayerSlice> = (set, g
       // Add Magical Gear for High Rarity
       if (summonData.rarity === ItemRarity.LEGENDARY || summonData.rarity === ItemRarity.VERY_RARE) {
           if (newChar.stats.class === CharacterClass.FIGHTER || newChar.stats.class === CharacterClass.PALADIN) {
-              newChar.equipment[EquipmentSlot.MAIN_HAND] = ITEMS.FLAME_TONGUE;
+              newChar.equipment[EquipmentSlot.MAIN_HAND] = items['flame_tongue'];
           }
           if (summonData.rarity === ItemRarity.LEGENDARY) {
               // Very strong start
-              newChar.equipment[EquipmentSlot.MAIN_HAND] = ITEMS.VORPAL_SWORD;
+              newChar.equipment[EquipmentSlot.MAIN_HAND] = items['vorpal_sword'];
           }
       }
 
@@ -272,80 +440,10 @@ export const createPlayerSlice: StateCreator<any, [], [], PlayerSlice> = (set, g
   },
 
   recalculateStats: (entity) => {
-    const effectiveAttributes = { ...entity.stats.baseAttributes };
-    let armorBase = 10; 
-    let shieldBonus = 0;
-    let hasArmor = false;
-
-    Object.values(entity.equipment).forEach((item: any) => {
-        if (!item || !item.equipmentStats) return;
-        const stats = item.equipmentStats;
-        if (stats.modifiers) Object.entries(stats.modifiers).forEach(([key, val]) => { if (val) effectiveAttributes[key as keyof Attributes] += (val as number); });
-        
-        if (stats.slot === EquipmentSlot.BODY && stats.ac) {
-            armorBase = stats.ac;
-            hasArmor = true;
-        }
-        if (stats.slot === EquipmentSlot.OFF_HAND && stats.ac) {
-            shieldBonus = stats.ac;
-        }
-    });
-
-    let dexMod = getModifier(effectiveAttributes.DEX);
-    if (armorBase >= 16) dexMod = 0; else if (armorBase >= 13) dexMod = Math.min(2, dexMod);
-    
-    let classACBonus = 0;
-    if (entity.stats.class === CharacterClass.FIGHTER && hasArmor) {
-        classACBonus = 1;
-    }
-
-    let raceStaminaBonus = 0;
-    if (entity.stats.race === CharacterRace.HUMAN) {
-        raceStaminaBonus = 3;
-    }
-
-    let baseSpeed = 30;
-    if (entity.stats.race === CharacterRace.ELF) {
-        baseSpeed = 35;
-    }
-    if (entity.stats.race === CharacterRace.DWARF || entity.stats.race === CharacterRace.HALFLING) {
-        baseSpeed = 25;
-    }
-
-    let calculatedMaxStamina = calculateMaxStamina(effectiveAttributes.CON, entity.stats.level) + raceStaminaBonus;
-    let currentStamina = entity.stats.stamina !== undefined ? entity.stats.stamina : calculatedMaxStamina;
-    if (currentStamina > calculatedMaxStamina) currentStamina = calculatedMaxStamina;
-
-    const corruption = entity.stats.corruption || 0;
-    const { acPenalty, maxHpPenalty } = getCorruptionPenalty(corruption);
-
-    const baseMaxHp = calculateHp(entity.stats.level, effectiveAttributes.CON, getHitDie(entity.stats.class), entity.stats.race);
-    const finalMaxHp = Math.max(1, baseMaxHp - maxHpPenalty);
-
-    return { 
-        ...entity.stats, 
-        ac: Math.max(0, (armorBase + dexMod + shieldBonus + classACBonus) - acPenalty), 
-        attributes: effectiveAttributes, 
-        initiativeBonus: getModifier(effectiveAttributes.DEX),
-        stamina: currentStamina,
-        maxStamina: calculatedMaxStamina,
-        maxHp: finalMaxHp,
-        speed: baseSpeed,
-        corruption: corruption,
-        activeCooldowns: entity.stats.activeCooldowns || {},
-        creatureType: entity.stats.creatureType || CreatureType.HUMANOID,
-        resistances: entity.stats.resistances || [],
-        vulnerabilities: entity.stats.vulnerabilities || [],
-        immunities: entity.stats.immunities || [],
-        // Ensure known skills persist, default to unlocked if not present (migration safe)
-        knownSkills: entity.stats.knownSkills || [],
-        knownSpells: entity.stats.knownSpells || [],
-        maxActions: entity.stats.maxActions || 1,
-        // Preserve new stats
-        rarity: entity.stats.rarity,
-        affinity: entity.stats.affinity,
-        traits: entity.stats.traits
-    };
+      const result = runStatsPipeline(entity);
+      // Ensure current stamina doesn't exceed new max
+      if (result.stamina > result.maxStamina) result.stamina = result.maxStamina;
+      return result;
   },
 
   applyLevelUp: (characterId, bonusAttributes) => {

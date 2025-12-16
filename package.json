@@ -1,5 +1,5 @@
 {
-  "name": "epic-earth-shards-of-eternum",
+  "name": "epic-earth:-shards-of-eternum",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,22 +9,24 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@react-three/fiber": "^8.16.8",
-    "@react-three/drei": "^9.108.3",
-    "three": "^0.165.0",
-    "three-stdlib": "^2.30.4",
-    "zustand": "^4.5.2",
-    "@supabase/supabase-js": "^2.39.3"
+    "react": "18.3.1",
+    "react-dom": "18.3.1&deps=react@18.3.1",
+    "@react-three/fiber": "8.16.8",
+    "@react-three/drei": "9.108.3",
+    "three": "0.165.0",
+    "three-stdlib": "2.30.4",
+    "zustand": "4.5.2&deps=react@18.3.1",
+    "url": "0.11.3",
+    "path": "1.0.1",
+    "fs": "1.0.0",
+    "https": "1.0.0",
+    "process": "^0.11.10",
+    "@supabase/supabase-js": "2.39.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "tailwindcss": "^3.4.1",
-    "postcss": "^8.4.35",
-    "autoprefixer": "^10.4.17"
+    "vite": "^6.2.0"
   }
 }

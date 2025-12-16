@@ -1,6 +1,7 @@
+
 import { create } from 'zustand';
-import { ITEMS, BASE_STATS, ASSETS, SPELLS, SKILLS, XP_TABLE, RACE_BONUS, CLASS_TREES, DIFFICULTY_SETTINGS, TERRAIN_MOVEMENT_COST, TERRAIN_COLORS } from '../constants';
-import { Item, CharacterClass, TerrainType, CreatureType, DamageType, Dimension, Spell, Skill, EnemyDefinition, LootEntry, ProgressionNode, CharacterRace, Attributes, Difficulty } from '../types';
+import { ITEMS, BASE_STATS, ASSETS, SPELLS, SKILLS, SUMMON_DEFINITIONS } from '../constants';
+import { Item, CharacterClass, TerrainType, CreatureType, DamageType, Dimension, Spell, Skill, EnemyDefinition, LootEntry } from '../types';
 import { getSupabase } from '../services/supabaseClient';
 
 interface GameConfig {
@@ -13,14 +14,7 @@ interface ContentState {
     items: Record<string, Item>;
     spells: Record<string, Spell>;
     skills: Record<string, Skill>;
-    classStats: Record<CharacterClass, Attributes>;
-    classTrees: Record<CharacterClass, ProgressionNode[]>;
-    raceBonuses: Record<CharacterRace, Partial<Attributes>>;
-    xpTable: Record<number, number>;
-    difficultySettings: Record<Difficulty, { enemyStatMod: number, xpMod: number }>;
-    terrainCosts: Record<TerrainType, number>;
-    terrainColors: Record<TerrainType, string>;
-    
+    classStats: Record<CharacterClass, any>;
     gameConfig: GameConfig;
     
     // Dynamic Enemy Data
@@ -38,9 +32,17 @@ interface ContentState {
     createEnemy: (enemy: EnemyDefinition) => void;
     deleteEnemy: (id: string) => void;
     
+    updateSpell: (id: string, data: Spell) => void;
+    createSpell: (spell: Spell) => void;
+    deleteSpell: (id: string) => void;
+
+    updateSkill: (id: string, data: Skill) => void;
+    createSkill: (skill: Skill) => void;
+    deleteSkill: (id: string) => void;
+    
     updateEncounterTable: (terrain: TerrainType, enemyIds: string[]) => void;
 
-    updateClassStats: (cls: CharacterClass, stats: Attributes) => void;
+    updateClassStats: (cls: CharacterClass, stats: any) => void;
     updateConfig: (config: Partial<GameConfig>) => void;
     
     // Cloud Sync Actions
@@ -51,13 +53,15 @@ interface ContentState {
     exportData: () => string;
 }
 
-// D&D 5e Inspired Bestiary (Hardcoded Fallback)
+// ... (DEFAULT_ENEMIES and DEFAULT_ENCOUNTERS remain unchanged, assuming implicit inclusion from previous step context or kept for brevity if this is a patch)
+// Since I must output full content for the file, I will include the defaults again to be safe.
+
 const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
     'goblin_spearman': { 
         id: 'goblin_spearman', name: 'Goblin', type: CreatureType.HUMANOID, sprite: ASSETS.UNITS.GOBLIN, 
         hp: 7, ac: 15, xpReward: 50, damage: 5, initiativeBonus: 2,
         attackDamageType: DamageType.PIERCING,
-        lootTable: [{ itemId: ITEMS.DAGGER.id, chance: 0.1 }],
+        lootTable: [{ itemId: 'dagger', chance: 0.1 }],
         validDimensions: [Dimension.NORMAL]
     },
     'skeleton': { 
@@ -66,7 +70,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         attackDamageType: DamageType.PIERCING, 
         vulnerabilities: [DamageType.BLUDGEONING],
         immunities: [DamageType.POISON],
-        lootTable: [{ itemId: ITEMS.SHORTSWORD.id, chance: 0.05 }],
+        lootTable: [{ itemId: 'shortsword', chance: 0.05 }],
         validDimensions: [Dimension.NORMAL, Dimension.UPSIDE_DOWN]
     },
     'skeleton_archer': { 
@@ -75,7 +79,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         attackDamageType: DamageType.PIERCING, 
         vulnerabilities: [DamageType.BLUDGEONING],
         immunities: [DamageType.POISON],
-        lootTable: [{ itemId: ITEMS.SHORTBOW.id, chance: 0.1 }],
+        lootTable: [{ itemId: 'shortbow', chance: 0.1 }],
         validDimensions: [Dimension.NORMAL, Dimension.UPSIDE_DOWN]
     },
     'zombie': { 
@@ -106,14 +110,14 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         id: 'orc_grunt', name: 'Orc Warrior', type: CreatureType.HUMANOID, sprite: ASSETS.UNITS.ORC, 
         hp: 15, ac: 13, xpReward: 100, damage: 9, initiativeBonus: 1,
         attackDamageType: DamageType.SLASHING, 
-        lootTable: [{ itemId: ITEMS.GREATAXE.id, chance: 0.1 }],
+        lootTable: [{ itemId: 'greataxe', chance: 0.1 }],
         validDimensions: [Dimension.NORMAL]
     },
     'orc_archer': { 
         id: 'orc_archer', name: 'Orc Archer', type: CreatureType.HUMANOID, sprite: ASSETS.UNITS.ORC_ARCHER, 
         hp: 15, ac: 13, xpReward: 100, damage: 7, initiativeBonus: 1,
         attackDamageType: DamageType.PIERCING, 
-        lootTable: [{ itemId: ITEMS.SHORTBOW.id, chance: 0.15 }],
+        lootTable: [{ itemId: 'shortbow', chance: 0.15 }],
         validDimensions: [Dimension.NORMAL]
     },
     'dire_wolf': { 
@@ -143,7 +147,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         hp: 22, ac: 12, xpReward: 250, damage: 8, initiativeBonus: 1,
         attackDamageType: DamageType.NECROTIC, 
         resistances: [DamageType.NECROTIC],
-        lootTable: [{ itemId: ITEMS.POTION_MANA.id, chance: 0.3 }],
+        lootTable: [{ itemId: 'potion_mana', chance: 0.3 }],
         validDimensions: [Dimension.NORMAL]
     },
     'troll': { 
@@ -151,7 +155,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         hp: 84, ac: 15, xpReward: 1800, damage: 14, initiativeBonus: 1,
         attackDamageType: DamageType.SLASHING, 
         vulnerabilities: [DamageType.FIRE, DamageType.ACID], 
-        lootTable: [{ itemId: ITEMS.POTION_STRENGTH.id, chance: 0.2 }],
+        lootTable: [{ itemId: 'potion_strength', chance: 0.2 }],
         validDimensions: [Dimension.NORMAL]
     },
     'fire_elemental': { 
@@ -161,7 +165,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         immunities: [DamageType.FIRE, DamageType.POISON],
         vulnerabilities: [DamageType.COLD],
         resistances: [DamageType.BLUDGEONING, DamageType.PIERCING, DamageType.SLASHING], 
-        lootTable: [{ itemId: ITEMS.FLAME_TONGUE.id, chance: 0.05 }],
+        lootTable: [{ itemId: 'flame_tongue', chance: 0.05 }],
         validDimensions: [Dimension.NORMAL, Dimension.UPSIDE_DOWN]
     },
     'mind_flayer': { 
@@ -169,7 +173,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         hp: 71, ac: 15, xpReward: 2900, damage: 15, initiativeBonus: 3,
         attackDamageType: DamageType.PSYCHIC,
         resistances: [DamageType.MAGIC], 
-        lootTable: [{ itemId: ITEMS.POTION_MANA.id, chance: 0.5 }],
+        lootTable: [{ itemId: 'potion_mana', chance: 0.5 }],
         validDimensions: [Dimension.UPSIDE_DOWN] 
     },
     'shadow_stalker': { 
@@ -188,7 +192,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         attackDamageType: DamageType.ACID,
         resistances: [DamageType.COLD, DamageType.LIGHTNING],
         immunities: [DamageType.PSYCHIC],
-        lootTable: [{ itemId: ITEMS.VORPAL_SWORD.id, chance: 0.1 }],
+        lootTable: [{ itemId: 'vorpal_sword', chance: 0.1 }],
         validDimensions: [Dimension.UPSIDE_DOWN]
     },
     'lich_lord': { 
@@ -198,7 +202,7 @@ const DEFAULT_ENEMIES: Record<string, EnemyDefinition> = {
         resistances: [DamageType.COLD, DamageType.LIGHTNING],
         immunities: [DamageType.POISON, DamageType.BLUDGEONING, DamageType.PIERCING, DamageType.SLASHING],
         vulnerabilities: [DamageType.RADIANT],
-        lootTable: [{ itemId: ITEMS.SACRED_ELIXIR.id, chance: 1.0 }, { itemId: ITEMS.VORPAL_SWORD.id, chance: 0.5 }],
+        lootTable: [{ itemId: 'sacred_elixir', chance: 1.0 }, { itemId: 'vorpal_sword', chance: 0.5 }],
         validDimensions: [Dimension.UPSIDE_DOWN]
     }
 };
@@ -220,19 +224,28 @@ const DEFAULT_ENCOUNTERS: Partial<Record<TerrainType, string[]>> = {
     [TerrainType.BADLANDS]: ['skeleton', 'ghoul', 'mind_flayer'],
 };
 
+// Normalize Data by ID for Store Consistency
+const normalizeById = <T extends { id: string }>(record: Record<string, T>): Record<string, T> => {
+    return Object.values(record).reduce((acc, item) => {
+        acc[item.id] = item;
+        return acc;
+    }, {} as Record<string, T>);
+};
+
+const normalizedItems = normalizeById(ITEMS);
+const normalizedSpells = normalizeById(SPELLS);
+const normalizedSkills = normalizeById(SKILLS);
+const normalizedSummons = normalizeById(SUMMON_DEFINITIONS);
+
+const fullBestiary = { ...DEFAULT_ENEMIES, ...normalizedSummons };
+
 const initialState = {
-    items: { ...ITEMS },
-    spells: { ...SPELLS },
-    skills: { ...SKILLS },
+    items: normalizedItems,
+    spells: normalizedSpells,
+    skills: normalizedSkills,
     classStats: { ...BASE_STATS },
-    classTrees: { ...CLASS_TREES },
-    raceBonuses: { ...RACE_BONUS },
-    xpTable: { ...XP_TABLE },
-    difficultySettings: { ...DIFFICULTY_SETTINGS },
-    terrainCosts: { ...TERRAIN_MOVEMENT_COST },
-    terrainColors: { ...TERRAIN_COLORS },
     gameConfig: { mapScale: 0.12, moistureOffset: 150, tempOffset: 300 },
-    enemies: DEFAULT_ENEMIES,
+    enemies: fullBestiary,
     encounters: DEFAULT_ENCOUNTERS,
     isLoading: false
 };
@@ -245,6 +258,15 @@ export const useContentStore = create<ContentState>((set, get) => ({
     updateEnemy: (id, data) => set(state => ({ enemies: { ...state.enemies, [id]: data } })),
     createEnemy: (enemy) => set(state => ({ enemies: { ...state.enemies, [enemy.id]: enemy } })),
     deleteEnemy: (id) => set(state => { const n = { ...state.enemies }; delete n[id]; return { enemies: n }; }),
+    
+    updateSpell: (id, data) => set(state => ({ spells: { ...state.spells, [id]: data } })),
+    createSpell: (spell) => set(state => ({ spells: { ...state.spells, [spell.id]: spell } })),
+    deleteSpell: (id) => set(state => { const n = { ...state.spells }; delete n[id]; return { spells: n }; }),
+
+    updateSkill: (id, data) => set(state => ({ skills: { ...state.skills, [id]: data } })),
+    createSkill: (skill) => set(state => ({ skills: { ...state.skills, [skill.id]: skill } })),
+    deleteSkill: (id) => set(state => { const n = { ...state.skills }; delete n[id]; return { skills: n }; }),
+
     updateEncounterTable: (terrain, enemyIds) => set(state => ({ encounters: { ...state.encounters, [terrain]: enemyIds } })),
     updateClassStats: (cls, stats) => set(state => ({ classStats: { ...state.classStats, [cls]: stats } })),
     updateConfig: (config) => set(state => ({ gameConfig: { ...state.gameConfig, ...config } })),
@@ -257,47 +279,19 @@ export const useContentStore = create<ContentState>((set, get) => ({
             const { data, error } = await supabase.from('game_definitions').select('*');
             if (error) throw error;
             if (data) {
-                const newItems: Record<string, Item> = { ...ITEMS };
-                const newEnemies: Record<string, EnemyDefinition> = { ...DEFAULT_ENEMIES };
-                const newSpells: Record<string, Spell> = { ...SPELLS };
-                const newSkills: Record<string, Skill> = { ...SKILLS };
-                const newClassStats: Record<CharacterClass, Attributes> = { ...BASE_STATS };
-                const newClassTrees: Record<CharacterClass, ProgressionNode[]> = { ...CLASS_TREES };
-                const newRaceBonuses: Record<CharacterRace, Partial<Attributes>> = { ...RACE_BONUS };
-                let newXpTable: Record<number, number> = { ...XP_TABLE };
-                let newDifficulty: Record<Difficulty, { enemyStatMod: number, xpMod: number }> = { ...DIFFICULTY_SETTINGS };
-                let newTerrainCosts: Record<TerrainType, number> = { ...TERRAIN_MOVEMENT_COST };
-                let newTerrainColors: Record<TerrainType, string> = { ...TERRAIN_COLORS };
-
+                const newItems: Record<string, Item> = { ...normalizedItems };
+                const newEnemies: Record<string, EnemyDefinition> = { ...fullBestiary };
+                const newSpells: Record<string, Spell> = { ...normalizedSpells };
+                const newSkills: Record<string, Skill> = { ...normalizedSkills };
+                
                 data.forEach((row: any) => {
                     if (row.category === 'ITEM') newItems[row.id] = row.data;
                     if (row.category === 'ENEMY') newEnemies[row.id] = row.data;
                     if (row.category === 'SPELL') newSpells[row.id] = row.data;
                     if (row.category === 'SKILL') newSkills[row.id] = row.data;
-                    if (row.category === 'CLASS_STATS') newClassStats[row.id as CharacterClass] = row.data;
-                    if (row.category === 'CLASS_TREE') newClassTrees[row.id as CharacterClass] = row.data;
-                    if (row.category === 'RACE_BONUS') newRaceBonuses[row.id as CharacterRace] = row.data;
-                    if (row.category === 'CONFIG') {
-                        if (row.id === 'xp_table') newXpTable = row.data;
-                        if (row.id === 'difficulty_settings') newDifficulty = row.data;
-                        if (row.id === 'terrain_costs') newTerrainCosts = row.data;
-                        if (row.id === 'terrain_colors') newTerrainColors = row.data;
-                    }
                 });
-                set({ 
-                    items: newItems, 
-                    enemies: newEnemies, 
-                    spells: newSpells, 
-                    skills: newSkills, 
-                    classStats: newClassStats,
-                    classTrees: newClassTrees,
-                    raceBonuses: newRaceBonuses,
-                    xpTable: newXpTable,
-                    difficultySettings: newDifficulty,
-                    terrainCosts: newTerrainCosts,
-                    terrainColors: newTerrainColors,
-                    isLoading: false 
-                });
+                
+                set({ items: newItems, enemies: newEnemies, spells: newSpells, skills: newSkills, isLoading: false });
                 console.log("Content synced from Supabase.");
             }
         } catch (e) {
@@ -310,20 +304,13 @@ export const useContentStore = create<ContentState>((set, get) => ({
         const supabase = getSupabase();
         if (!supabase) { alert("Supabase not configured or available."); return; }
         const state = get();
-        const { items, enemies, spells, skills, classStats, classTrees, raceBonuses, xpTable, difficultySettings, terrainCosts, terrainColors } = state;
+        const { items, enemies, spells, skills } = state;
         set({ isLoading: true });
         const rows = [
             ...Object.values(items).map((i: Item) => ({ id: i.id, category: 'ITEM', data: i })),
             ...Object.values(enemies).map((e: EnemyDefinition) => ({ id: e.id, category: 'ENEMY', data: e })),
             ...Object.values(spells).map((s: Spell) => ({ id: s.id, category: 'SPELL', data: s })),
             ...Object.values(skills).map((s: Skill) => ({ id: s.id, category: 'SKILL', data: s })),
-            ...Object.entries(classStats).map(([id, data]) => ({ id, category: 'CLASS_STATS', data })),
-            ...Object.entries(classTrees).map(([id, data]) => ({ id, category: 'CLASS_TREE', data })),
-            ...Object.entries(raceBonuses).map(([id, data]) => ({ id, category: 'RACE_BONUS', data })),
-            { id: 'xp_table', category: 'CONFIG', data: xpTable },
-            { id: 'difficulty_settings', category: 'CONFIG', data: difficultySettings },
-            { id: 'terrain_costs', category: 'CONFIG', data: terrainCosts },
-            { id: 'terrain_colors', category: 'CONFIG', data: terrainColors },
         ];
         try {
             const { error } = await supabase.from('game_definitions').upsert(rows, { onConflict: 'id' });
@@ -350,12 +337,6 @@ export const useContentStore = create<ContentState>((set, get) => ({
             spells: state.spells,
             skills: state.skills,
             classStats: state.classStats,
-            classTrees: state.classTrees,
-            raceBonuses: state.raceBonuses,
-            xpTable: state.xpTable,
-            difficultySettings: state.difficultySettings,
-            terrainCosts: state.terrainCosts,
-            terrainColors: state.terrainColors,
             gameConfig: state.gameConfig
         }, null, 2);
     }

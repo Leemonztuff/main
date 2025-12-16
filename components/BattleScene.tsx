@@ -3,7 +3,7 @@ import React, { Suspense, useMemo, useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Html, SpotLight, Preload, OrthographicCamera } from '@react-three/drei';
 import * as THREE from 'three';
-import { Entity, Dimension, WeatherType, BattleAction } from '../types';
+import { Entity, Dimension, WeatherType, BattleAction, TerrainType } from '../types';
 import { useGameStore } from '../store/gameStore';
 import { WeatherOverlay } from './OverworldMap';
 import { BATTLE_MAP_SIZE } from '../constants';
@@ -63,6 +63,7 @@ const DamagePopupManager = () => {
 export const BattleScene = ({ entities, weather, terrainType, currentTurnEntityId, onTileClick, validMoves, validTargets }: any) => {
     const { battleMap, handleTileHover, dimension, hasActed, hasMoved, activeSpellEffect, lootDrops, isActionAnimating, selectedAction, selectedSpell, inspectUnit } = useGameStore();
     const isShadowRealm = dimension === Dimension.UPSIDE_DOWN;
+    const isLava = terrainType === TerrainType.LAVA;
     const activeEntity = entities?.find((e: Entity) => e.id === currentTurnEntityId);
     const center = BATTLE_MAP_SIZE / 2;
 
@@ -94,6 +95,13 @@ export const BattleScene = ({ entities, weather, terrainType, currentTurnEntityI
         }
     }, [activeEntity]);
 
+    // Theme Config
+    // Boosted ambient intensity for Lava to make it more visible
+    const ambientIntensity = isShadowRealm ? (isLava ? 0.75 : 0.4) : 0.6;
+    const ambientColor = isShadowRealm ? (isLava ? '#9f3d3d' : '#4c1d95') : '#ffffff';
+    const sunColor = isShadowRealm ? (isLava ? '#ff6644' : '#a855f7') : '#fff7ed';
+    const spotColor = isShadowRealm ? (isLava ? '#ffaa33' : '#d8b4fe') : '#fbbf24';
+
     return (
         <div className="w-full h-full relative bg-slate-950">
             {/* DOM Overlay for Weather - Must be outside Canvas to avoid R3F crashes */}
@@ -102,10 +110,9 @@ export const BattleScene = ({ entities, weather, terrainType, currentTurnEntityI
             <Canvas
                 shadows
                 dpr={[1, 2]}
-                gl={{ antialias: false, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
+                gl={{ antialias: false, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
             >
-                <fog attach="fog" args={[isShadowRealm ? '#1e1b4b' : '#0f172a', 5, 25]} />
-                <FogController isShadowRealm={isShadowRealm} />
+                <FogController isShadowRealm={isShadowRealm} terrain={terrainType} />
 
                 {/* Camera & Controls */}
                 <OrthographicCamera makeDefault position={[10, 10, 10]} zoom={45} near={-50} far={200} />
@@ -123,13 +130,13 @@ export const BattleScene = ({ entities, weather, terrainType, currentTurnEntityI
                 <CinematicCamera />
 
                 {/* Lighting */}
-                <ambientLight intensity={isShadowRealm ? 0.3 : 0.6} color={isShadowRealm ? '#4c1d95' : '#ffffff'} />
+                <ambientLight intensity={ambientIntensity} color={ambientColor} />
                 <directionalLight 
                     position={[10, 20, 5]} 
-                    intensity={isShadowRealm ? 0.5 : 1.2} 
+                    intensity={isShadowRealm ? 0.8 : 1.2} 
                     castShadow 
                     shadow-mapSize={[2048, 2048]}
-                    color={isShadowRealm ? '#a855f7' : '#fff7ed'}
+                    color={sunColor}
                 >
                     <orthographicCamera attach="shadow-camera" args={[-20, 20, 20, -20]} />
                 </directionalLight>
@@ -143,7 +150,7 @@ export const BattleScene = ({ entities, weather, terrainType, currentTurnEntityI
                     penumbra={0.5}
                     intensity={1.5}
                     castShadow
-                    color={isShadowRealm ? '#d8b4fe' : '#fbbf24'}
+                    color={spotColor}
                 />
 
                 {/* ASSET LOADING SUSPENSE WRAPPER */}
@@ -196,9 +203,13 @@ export const BattleScene = ({ entities, weather, terrainType, currentTurnEntityI
                     {/* Loot */}
                     {lootDrops.map((drop) => <LootDropVisual key={drop.id} drop={drop} />)}
 
-                    {/* Atmosphere - Use ternary to prevent boolean false in R3F */}
-                    {isShadowRealm ? <VoidParticles color="#a855f7" floatUp={true} /> : null}
-                    {weather === WeatherType.ASH ? <VoidParticles color="#ea580c" floatUp={false} /> : null}
+                    {/* Atmosphere */}
+                    {isLava ? (
+                        <VoidParticles color="#ea580c" floatUp={true} />
+                    ) : (
+                        isShadowRealm ? <VoidParticles color="#a855f7" floatUp={true} /> : null
+                    )}
+                    {weather === WeatherType.ASH ? <VoidParticles color="#78716c" floatUp={false} /> : null}
                     {weather === WeatherType.SNOW ? <VoidParticles color="white" floatUp={false} /> : null}
                     
                     {/* UI In-Scene */}

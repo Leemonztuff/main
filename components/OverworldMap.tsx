@@ -62,9 +62,8 @@ const useSpriteLoader = (additionalSprites: string[] = []) => {
         });
         if (ASSETS.TEMPLE_ICON) urlsToLoad.add(ASSETS.TEMPLE_ICON);
         if (ASSETS.PORTAL_ICON) urlsToLoad.add(ASSETS.PORTAL_ICON);
-        if (ASSETS.UNITS.PLAYER) urlsToLoad.add(ASSETS.UNITS.PLAYER);
-
-        // 2. Dynamic Sprites (Enemies)
+        
+        // 2. Dynamic Sprites (Enemies & Player)
         additionalSprites.forEach(url => {
             if (url) urlsToLoad.add(url);
         });
@@ -74,19 +73,20 @@ const useSpriteLoader = (additionalSprites: string[] = []) => {
 
         urlsToLoad.forEach(url => {
             const img = new Image();
+            img.crossOrigin = "Anonymous"; // Allow external CDN usage
             img.src = url;
             img.onload = () => {
                 loadedCount++;
                 setVersion(v => v + 1); 
             };
             img.onerror = () => {
-                // Silent fail or placeholder
+                console.warn(`Failed to load sprite: ${url}`);
             };
             loadedImages[url] = img;
         });
 
         setImages(loadedImages);
-    }, [JSON.stringify(additionalSprites)]); // Reload if enemy list changes
+    }, [JSON.stringify(additionalSprites)]); // Reload if sprite list changes
 
     return images;
 };
@@ -135,48 +135,82 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
     // Connect to Store State
     const { exploredTiles, activeOverworldEnemies, party } = useGameStore();
     
-    // Calculate required sprites including enemies
-    const enemySprites = useMemo(() => {
-        return activeOverworldEnemies
-            .filter(e => e.dimension === dimension)
-            .map(e => e.sprite);
-    }, [activeOverworldEnemies, dimension]);
-
-    const images = useSpriteLoader(enemySprites);
-    
     // Viewport State
     const [offset, setOffset] = useState({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1); // New Zoom State
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [hoverPath, setHoverPath] = useState<HexCell[]>([]);
     const [hoveredCell, setHoveredCell] = useState<HexCell | null>(null);
     const lastHoverRef = useRef({ q: -999, r: -999 });
+    
+    // Touch state
+    const touchStartRef = useRef<{x: number, y: number} | null>(null);
 
-    // Handle Resize
-    useEffect(() => {
-        const handleResize = () => {
-            if (canvasRef.current && containerRef.current) {
-                canvasRef.current.width = containerRef.current.clientWidth;
-                canvasRef.current.height = containerRef.current.clientHeight;
-                centerOnPlayer();
-            }
-        };
-        window.addEventListener('resize', handleResize);
-        handleResize(); 
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    // Calculate required sprites including enemies AND THE PLAYER LEADER
+    const requiredSprites = useMemo(() => {
+        const list = activeOverworldEnemies
+            .filter(e => e.dimension === dimension)
+            .map(e => e.sprite);
+        
+        // Add Player Leader Sprite to ensure it loads
+        if (party && party[0]?.visual?.spriteUrl) {
+            list.push(party[0].visual.spriteUrl);
+        } else {
+            list.push(ASSETS.UNITS.PLAYER);
+        }
+        
+        return list;
+    }, [activeOverworldEnemies, dimension, party]);
+
+    const images = useSpriteLoader(requiredSprites);
 
     const centerOnPlayer = useCallback(() => {
         if (!containerRef.current) return;
         const centerPixel = hexToPixel(playerPos.x, playerPos.y);
         const centerX = containerRef.current.clientWidth / 2;
         const centerY = containerRef.current.clientHeight / 2;
-        setOffset({ x: centerX - centerPixel.x, y: centerY - centerPixel.y });
-    }, [playerPos]);
+        
+        // Apply zoom to centering calculation:
+        // We want PlayerWorldPos + Offset = CenterScreen / Zoom
+        // So Offset = (CenterScreen / Zoom) - PlayerWorldPos
+        setOffset({ 
+            x: (centerX / zoom) - centerPixel.x, 
+            y: (centerY / zoom) - centerPixel.y 
+        });
+    }, [playerPos, zoom]);
 
+    // Handle Resize (High DPI + Desktop Zoom Logic)
+    useEffect(() => {
+        const handleResize = () => {
+            if (canvasRef.current && containerRef.current) {
+                const canvas = canvasRef.current;
+                const container = containerRef.current;
+                
+                // 1. Detect Desktop vs Mobile for Auto-Zoom
+                const isDesktop = container.clientWidth > 1024;
+                const newZoom = isDesktop ? 1.5 : 1.0;
+                setZoom(newZoom);
+
+                // 2. Setup DPI scaling
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = container.clientWidth * dpr;
+                canvas.height = container.clientHeight * dpr;
+                canvas.style.width = `${container.clientWidth}px`;
+                canvas.style.height = `${container.clientHeight}px`;
+                
+                // We'll call centerOnPlayer in the dependency effect below
+            }
+        };
+        window.addEventListener('resize', handleResize);
+        handleResize(); // Init
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Recenter when player moves or zoom changes
     useEffect(() => {
         centerOnPlayer();
-    }, [playerPos.x, playerPos.y, centerOnPlayer]);
+    }, [playerPos.x, playerPos.y, zoom, centerOnPlayer]);
 
     // --- DRAW LOOP ---
     useEffect(() => {
@@ -185,17 +219,29 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
         const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) return;
 
+        // SCALE CONTEXT FOR HIGH DPI + GAME ZOOM
+        const dpr = window.devicePixelRatio || 1;
+        ctx.resetTransform();
+        // Combine Device Pixel Ratio with our Game Zoom level
+        ctx.scale(dpr * zoom, dpr * zoom);
+        
+        // CRITICAL: DISABLE SMOOTHING FOR PIXEL ART
+        ctx.imageSmoothingEnabled = false;
+
+        // Calculate logical width/height (in game world pixels)
+        const logicalWidth = canvas.width / (dpr * zoom);
+        const logicalHeight = canvas.height / (dpr * zoom);
+
         // Background
         ctx.fillStyle = dimension === Dimension.UPSIDE_DOWN ? '#0f0518' : '#0f172a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
         const startX = -offset.x - HEX_SIZE * 2;
         const startY = -offset.y - HEX_SIZE * 2;
-        const endX = startX + canvas.width + HEX_SIZE * 4;
-        const endY = startY + canvas.height + HEX_SIZE * 4;
+        const endX = startX + logicalWidth + HEX_SIZE * 4;
+        const endY = startY + logicalHeight + HEX_SIZE * 4;
 
         // Helper to check if a tile is currently visible (Line of Sight / Fog of War)
-        // In this simplified model, we calculate it dynamically based on the player position + explored set
         const visionRange = calculateVisionRange(party[0]?.stats.attributes.WIS || 10, party[0]?.stats.corruption || 0);
         const isTileVisible = (q: number, r: number) => {
             if (mapData) return true; // Town is fully visible usually
@@ -205,11 +251,14 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
 
         const drawTile = (cell: HexCell, isPathPreview = false) => {
             const { x, y } = hexToPixel(cell.q, cell.r);
-            const screenX = x + offset.x;
-            const screenY = y + offset.y;
+            
+            // INTEGER SNAPPING: Round to nearest pixel to avoid blurring
+            const screenX = Math.floor(x + offset.x);
+            const screenY = Math.floor(y + offset.y);
 
-            if (screenX < -HEX_SIZE * 2 || screenX > canvas.width + HEX_SIZE * 2 || 
-                screenY < -HEX_SIZE * 2 || screenY > canvas.height + HEX_SIZE * 2) return;
+            // Culling with Zoom factored in implicitly via logicalWidth/Height
+            if (screenX < -HEX_SIZE * 2 || screenX > logicalWidth + HEX_SIZE * 2 || 
+                screenY < -HEX_SIZE * 2 || screenY > logicalHeight + HEX_SIZE * 2) return;
 
             // Hex Shape Path
             ctx.beginPath();
@@ -233,18 +282,14 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                     ctx.clip();
                     ctx.drawImage(baseImg, screenX - HEX_SIZE, screenY - HEX_SIZE * Math.sqrt(3)/2, HEX_SIZE * 2, HEX_SIZE * Math.sqrt(3));
                     
-                    // Fog of War (Explored but not currently visible)
                     if (!isVisible && !mapData) {
                         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
                         ctx.fill();
                     }
-                    
-                    // Path Highlight
                     if (isPathPreview) {
                         ctx.fillStyle = 'rgba(251, 191, 36, 0.4)'; // Amber glow
                         ctx.fill();
                     }
-
                     if (dimension === Dimension.UPSIDE_DOWN) {
                         ctx.fillStyle = 'rgba(20, 0, 40, 0.4)';
                         ctx.fill();
@@ -253,6 +298,9 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                 } else {
                     ctx.fillStyle = TERRAIN_COLORS[cell.terrain] || '#333';
                     ctx.fill();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
                 }
                 
                 // Border
@@ -260,7 +308,7 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                 ctx.lineWidth = isPathPreview ? 2 : 1;
                 ctx.stroke();
 
-                // 2. OVERLAYS (Only if not too dark)
+                // 2. OVERLAYS
                 const overlayData = ASSETS.OVERLAYS[cell.terrain];
                 if (overlayData) {
                     const overlayUrl = Array.isArray(overlayData) ? overlayData[Math.abs((cell.q * 3 + cell.r) % overlayData.length)] : overlayData;
@@ -270,7 +318,7 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                         const size = HEX_SIZE * 2.2;
                         const opacity = (!isVisible && !mapData) ? 0.4 : 1;
                         ctx.globalAlpha = opacity;
-                        ctx.drawImage(overlayImg, screenX - size/2, screenY - size * 0.7, size, size);
+                        ctx.drawImage(overlayImg, Math.floor(screenX - size/2), Math.floor(screenY - size * 0.7), size, size);
                         ctx.globalAlpha = 1;
                     }
                 }
@@ -300,13 +348,12 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                     }
                 }
                 
-                // Portal
                 if (cell.hasPortal) {
                     const portalImg = images[ASSETS.PORTAL_ICON];
                     if (portalImg && portalImg.complete && portalImg.naturalWidth > 0) {
                         const pulse = 1 + Math.sin(Date.now() / 200) * 0.1;
                         const size = HEX_SIZE * 1.5 * pulse;
-                        ctx.drawImage(portalImg, screenX - size/2, screenY - size/2, size, size);
+                        ctx.drawImage(portalImg, Math.floor(screenX - size/2), Math.floor(screenY - size/2), size, size);
                     } else {
                         ctx.fillStyle = '#a855f7';
                         ctx.beginPath();
@@ -318,7 +365,6 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                 }
 
             } else {
-                // UNEXPLORED
                 ctx.fillStyle = '#020617';
                 ctx.fill();
                 ctx.strokeStyle = '#1e293b';
@@ -347,8 +393,6 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                     if (isExplored) {
                         cell = { ...WorldGenerator.getTile(q, r, dimension), isExplored: true };
                     } else {
-                        // Even unexplored path should be visible-ish if dragging/pathfinding? usually no.
-                        // But we can show cursor preview.
                         cell = { q, r, terrain: TerrainType.GRASS, weather: WeatherType.NONE, isExplored: false, isVisible: false };
                     }
                     drawTile(cell, isHoveredPath);
@@ -356,24 +400,23 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
             }
         }
 
-        // 4. DRAW ENEMIES (Re-connected)
+        // 4. DRAW ENEMIES
         activeOverworldEnemies.forEach(enemy => {
             if (enemy.dimension !== dimension) return;
-            
-            // Only draw enemies if player has Line of Sight (approximated by Tile Visibility here)
             if (!isTileVisible(enemy.q, enemy.r)) return;
 
             const { x, y } = hexToPixel(enemy.q, enemy.r);
-            const screenX = x + offset.x;
-            const screenY = y + offset.y;
+            const screenX = Math.floor(x + offset.x);
+            const screenY = Math.floor(y + offset.y);
 
             // Sprite or Fallback
             const enemyImg = images[enemy.sprite];
             if (enemyImg && enemyImg.complete && enemyImg.naturalWidth > 0) {
-                const size = HEX_SIZE * 1.5;
-                // Bobbing animation
+                // SCALED UP ENEMY (1.8x)
+                const size = HEX_SIZE * 1.8;
                 const bob = Math.sin(Date.now() / 300) * 5;
-                ctx.drawImage(enemyImg, screenX - size/2, screenY - size * 0.8 + bob, size, size);
+                // Anchor Y so feet are at tile center (approx)
+                ctx.drawImage(enemyImg, Math.floor(screenX - size/2), Math.floor(screenY - size * 0.8 + bob), size, size);
             } else {
                 ctx.fillStyle = '#ef4444';
                 ctx.beginPath();
@@ -391,11 +434,12 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
             ctx.fillRect(screenX - 10, screenY - 30, 20, 4);
         });
 
-        // 5. DRAW PLAYER
+        // 5. DRAW PLAYER (DYNAMIC LEADER SPRITE)
         const { x: px, y: py } = hexToPixel(playerPos.x, playerPos.y);
-        const screenPx = px + offset.x;
-        const screenPy = py + offset.y;
+        const screenPx = Math.floor(px + offset.x);
+        const screenPy = Math.floor(py + offset.y);
 
+        // Position Indicator Ring
         const gradient = ctx.createRadialGradient(screenPx, screenPy, HEX_SIZE * 0.2, screenPx, screenPy, HEX_SIZE * 0.8);
         gradient.addColorStop(0, 'rgba(59, 130, 246, 0.6)');
         gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
@@ -404,11 +448,28 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
         ctx.arc(screenPx, screenPy, HEX_SIZE * 0.8, 0, Math.PI * 2);
         ctx.fill();
 
-        const playerImg = images[ASSETS.UNITS.PLAYER];
+        // Use the leader's specific sprite URL
+        const playerSpriteUrl = party[0]?.visual?.spriteUrl || ASSETS.UNITS.PLAYER;
+        const playerImg = images[playerSpriteUrl];
+
         if (playerImg && playerImg.complete && playerImg.naturalWidth > 0) {
-            const size = HEX_SIZE * 1.2;
+            // SCALED UP PLAYER (2.4x) - HEROIC SCALE
+            const size = HEX_SIZE * 2.4;
             const bounce = Math.abs(Math.sin(Date.now() / 200)) * 3;
-            ctx.drawImage(playerImg, screenPx - size/2, screenPy - size/2 - 5 - bounce, size, size);
+            
+            // Draw Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(screenPx, screenPy, size/4, size/8, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            // Draw Sprite
+            // Anchor Logic: 
+            // X: Center (screenPx - size/2)
+            // Y: Move up so feet roughly align with tile center (screenPy - size * 0.75)
+            // This allows head to overlap tile above for depth
+            ctx.drawImage(playerImg, Math.floor(screenPx - size/2), Math.floor(screenPy - size * 0.75 - bounce), size, size);
+            
         } else {
             ctx.fillStyle = '#3b82f6';
             ctx.beginPath();
@@ -419,67 +480,79 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
             ctx.stroke();
         }
 
-    }, [offset, mapData, playerPos, dimension, exploredTiles, activeOverworldEnemies, hoverPath, images, party]);
+    }, [offset, zoom, mapData, playerPos, dimension, exploredTiles, activeOverworldEnemies, hoverPath, images, party]);
 
-    // --- INTERACTION HANDLERS ---
+    // --- INTERACTION HANDLERS (MOUSE) ---
+
+    // Helper to get World Coordinates taking Zoom into account
+    const getWorldMouse = (clientX: number, clientY: number) => {
+        if (!canvasRef.current) return { x: 0, y: 0 };
+        const rect = canvasRef.current.getBoundingClientRect();
+        // Mouse relative to canvas top-left
+        const rawX = clientX - rect.left;
+        const rawY = clientY - rect.top;
+        
+        // Convert to Zoomed World Space
+        const worldX = (rawX / zoom) - offset.x;
+        const worldY = (rawY / zoom) - offset.y;
+        
+        return { x: worldX, y: worldY };
+    };
 
     const handleMouseDown = (e: React.MouseEvent) => {
         setIsDragging(true);
-        setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+        // Store the raw screen position for drag delta calculation
+        setDragStart({ x: e.clientX, y: e.clientY });
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
         if (isDragging) {
-            setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+            // Drag moves the camera, so we change offset.
+            // Delta in screen pixels needs to be divided by zoom to get delta in world pixels
+            const dx = (e.clientX - dragStart.x) / zoom;
+            const dy = (e.clientY - dragStart.y) / zoom;
+            setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+            setDragStart({ x: e.clientX, y: e.clientY });
         } else {
-            // PATHFINDING PREVIEW (Re-connected)
-            const rect = canvasRef.current?.getBoundingClientRect();
-            if (rect) {
-                const x = e.clientX - rect.left - offset.x;
-                const y = e.clientY - rect.top - offset.y;
-                const { q, r } = pixelToAxial(x, y);
+            // PATHFINDING PREVIEW
+            const { x, y } = getWorldMouse(e.clientX, e.clientY);
+            const { q, r } = pixelToAxial(x, y);
 
-                // Debounce pathfinding calculation
-                if (q !== lastHoverRef.current.q || r !== lastHoverRef.current.r) {
-                    lastHoverRef.current = { q, r };
-                    
-                    // Update Hovered Cell Data for Tooltip
-                    if (mapData) {
-                        setHoveredCell(mapData.find(c => c.q === q && c.r === r) || null);
-                    } else {
-                        // Check if explored
-                        const key = `${q},${r}`;
-                        const isExplored = exploredTiles[dimension]?.has(key);
-                        if (isExplored) {
-                            setHoveredCell(WorldGenerator.getTile(q, r, dimension));
-                        } else {
-                            setHoveredCell(null);
-                        }
-                    }
-
-                    // Don't calc path to self
-                    if (q === playerPos.x && r === playerPos.y) {
-                        setHoverPath([]);
-                        return;
-                    }
-
-                    // Check if tile is valid/explored
+            if (q !== lastHoverRef.current.q || r !== lastHoverRef.current.r) {
+                lastHoverRef.current = { q, r };
+                
+                if (mapData) {
+                    setHoveredCell(mapData.find(c => c.q === q && c.r === r) || null);
+                } else {
                     const key = `${q},${r}`;
-                    const isExplored = mapData || exploredTiles[dimension]?.has(key);
-                    
+                    const isExplored = exploredTiles[dimension]?.has(key);
                     if (isExplored) {
-                        let path: any[] | null = null;
-                        if (mapData) {
-                            path = findPath({q: playerPos.x, r: playerPos.y}, {q, r}, mapData);
-                        } else {
-                            path = findPath({q: playerPos.x, r: playerPos.y}, {q, r}, undefined, (qx, rx) => WorldGenerator.getTile(qx, rx, dimension));
-                        }
-                        
-                        if (path) setHoverPath(path);
-                        else setHoverPath([]);
+                        setHoveredCell(WorldGenerator.getTile(q, r, dimension));
                     } else {
-                        setHoverPath([]);
+                        setHoveredCell(null);
                     }
+                }
+
+                if (q === playerPos.x && r === playerPos.y) {
+                    setHoverPath([]);
+                    return;
+                }
+
+                const key = `${q},${r}`;
+                const isExplored = mapData || exploredTiles[dimension]?.has(key);
+                
+                if (isExplored) {
+                    let path: any[] | null = null;
+                    if (mapData) {
+                        path = findPath({q: playerPos.x, r: playerPos.y}, {q, r}, mapData);
+                    } else {
+                        path = findPath({q: playerPos.x, r: playerPos.y}, {q, r}, undefined, (qx, rx) => WorldGenerator.getTile(qx, rx, dimension));
+                    }
+                    
+                    if (path) setHoverPath(path);
+                    else setHoverPath([]);
+                } else {
+                    setHoverPath([]);
                 }
             }
         }
@@ -490,14 +563,68 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
     const handleClick = (e: React.MouseEvent) => {
         if (isDragging) return;
         
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        
-        const x = e.clientX - rect.left - offset.x;
-        const y = e.clientY - rect.top - offset.y;
-        
+        const { x, y } = getWorldMouse(e.clientX, e.clientY);
         const { q, r } = pixelToAxial(x, y);
         onMove(q, r);
+    };
+
+    // --- INTERACTION HANDLERS (TOUCH - MOBILE SUPPORT) ---
+    
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+            setIsDragging(true);
+            setDragStart({ x: touch.clientX, y: touch.clientY });
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 1 && isDragging) {
+            const touch = e.touches[0];
+            const dx = (touch.clientX - dragStart.x) / zoom;
+            const dy = (touch.clientY - dragStart.y) / zoom;
+            setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+            setDragStart({ x: touch.clientX, y: touch.clientY });
+        }
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        setIsDragging(false);
+        
+        if (e.changedTouches.length === 1 && touchStartRef.current) {
+            const touch = e.changedTouches[0];
+            // If movement is very small, treat as Click/Tap
+            const dist = Math.abs(touch.clientX - touchStartRef.current.x) + Math.abs(touch.clientY - touchStartRef.current.y);
+            
+            if (dist < 10) { // Tolerance for "tap"
+                const { x, y } = getWorldMouse(touch.clientX, touch.clientY);
+                const { q, r } = pixelToAxial(x, y);
+                
+                // On mobile, first tap shows preview/path, second tap confirms move
+                const key = `${q},${r}`;
+                const isExplored = mapData || exploredTiles[dimension]?.has(key);
+                
+                if (isExplored) {
+                    setHoveredCell(mapData ? mapData.find(c => c.q === q && c.r === r) || null : WorldGenerator.getTile(q, r, dimension));
+                    
+                    // Calculate path for preview
+                    let path: any[] | null = null;
+                    if (mapData) path = findPath({q: playerPos.x, r: playerPos.y}, {q, r}, mapData);
+                    else path = findPath({q: playerPos.x, r: playerPos.y}, {q, r}, undefined, (qx, rx) => WorldGenerator.getTile(qx, rx, dimension));
+                    
+                    if (hoverPath.length > 0 && hoverPath[hoverPath.length-1].q === q && hoverPath[hoverPath.length-1].r === r) {
+                        // Confirmed move
+                        onMove(q, r);
+                        setHoverPath([]);
+                    } else {
+                        // Show preview
+                        setHoverPath(path || []);
+                    }
+                }
+            }
+        }
+        touchStartRef.current = null;
     };
 
     const currentWeather = useMemo(() => {
@@ -506,7 +633,7 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
     }, [playerPos, dimension, mapData]);
 
     return (
-        <div ref={containerRef} className="fixed inset-0 w-full h-full bg-black select-none z-0">
+        <div ref={containerRef} className="fixed inset-0 w-full h-full bg-black select-none z-0 overflow-hidden touch-none">
             <canvas 
                 ref={canvasRef}
                 onMouseDown={handleMouseDown}
@@ -514,6 +641,9 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                 onMouseUp={handleMouseUp}
                 onMouseLeave={() => { handleMouseUp(); setHoverPath([]); setHoveredCell(null); }}
                 onClick={handleClick}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
                 className="block cursor-crosshair touch-none w-full h-full"
             />
             <WeatherOverlay type={currentWeather} />
@@ -525,7 +655,7 @@ export const OverworldMap: React.FC<OverworldMapProps> = ({ mapData, playerPos, 
                 </div>
             </div>
 
-            {/* Terrain Info Tooltip (Re-connected) */}
+            {/* Terrain Info Tooltip */}
             {hoveredCell && (
                 <div className="absolute bottom-32 right-4 bg-slate-900/90 border border-slate-700 p-3 rounded-lg text-xs text-slate-200 z-10 shadow-lg pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
                     <div className="font-bold text-amber-400 uppercase tracking-widest mb-1">{hoveredCell.terrain}</div>

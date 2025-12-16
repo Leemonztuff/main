@@ -20,17 +20,19 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ entity, onClick, isSelect
             onClick={onClick}
             disabled={isLeader}
             className={`
-                relative w-full text-left p-2 md:p-3 rounded-xl border-2 transition-all group flex items-center gap-3 md:gap-4
-                ${isLeader ? 'bg-amber-900/20 border-amber-600/50 cursor-default' : 
-                  isSelected ? 'bg-purple-900/40 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 
-                  'bg-slate-900/60 border-slate-700 hover:border-slate-500 hover:bg-slate-800'
+                relative w-full text-left p-2 md:p-3 rounded-xl border-2 transition-all duration-200 group flex items-center gap-3 md:gap-4 outline-none focus:ring-2 focus:ring-amber-500
+                ${isLeader 
+                    ? 'bg-amber-900/20 border-amber-600/50 cursor-default' 
+                    : isSelected 
+                        ? 'bg-purple-900/40 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)] scale-[1.02]' 
+                        : 'bg-slate-900/60 border-slate-700 hover:border-amber-500/70 hover:bg-slate-800 hover:shadow-lg hover:scale-[1.01]'
                 }
             `}
         >
             {/* Avatar */}
             <div className={`
-                w-12 h-12 md:w-16 md:h-16 rounded-lg bg-black/50 overflow-hidden border shrink-0 flex items-center justify-center
-                ${isSelected ? 'border-purple-400' : 'border-slate-600'}
+                w-12 h-12 md:w-16 md:h-16 rounded-lg bg-black/50 overflow-hidden border shrink-0 flex items-center justify-center transition-colors
+                ${isSelected ? 'border-purple-400' : 'border-slate-600 group-hover:border-slate-500'}
             `}>
                 <img src={entity.visual.spriteUrl} className="w-10 h-10 md:w-12 md:h-12 object-contain pixelated" alt={entity.name} />
             </div>
@@ -38,11 +40,11 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ entity, onClick, isSelect
             {/* Info */}
             <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
-                    <h3 className={`font-serif font-bold truncate text-sm md:text-base ${isSelected ? 'text-purple-200' : 'text-slate-200'}`}>
+                    <h3 className={`font-serif font-bold truncate text-sm md:text-base transition-colors ${isSelected ? 'text-purple-200' : 'text-slate-200 group-hover:text-amber-100'}`}>
                         {entity.name}
                         {isLeader && <span className="ml-2 text-[9px] md:text-[10px] bg-amber-600 text-white px-1.5 py-0.5 rounded uppercase tracking-wider">Leader</span>}
                     </h3>
-                    <div className="text-lg md:text-xl opacity-50 group-hover:opacity-100 transition-all">
+                    <div className="text-lg md:text-xl opacity-50 group-hover:opacity-100 transition-all transform group-hover:scale-110">
                         <img 
                             src={classInfo.icon} 
                             className="w-5 h-5 md:w-6 md:h-6" 
@@ -56,7 +58,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ entity, onClick, isSelect
                 </div>
                 
                 <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] md:text-xs text-slate-400 font-bold bg-black/30 px-2 py-0.5 rounded border border-white/5">
+                    <span className="text-[10px] md:text-xs text-slate-400 font-bold bg-black/30 px-2 py-0.5 rounded border border-white/5 group-hover:border-white/20 transition-colors">
                         Lvl {entity.stats.level} {entity.stats.class}
                     </span>
                     <span className="text-[10px] md:text-xs text-slate-500 hidden sm:inline">
@@ -64,7 +66,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ entity, onClick, isSelect
                     </span>
                 </div>
 
-                <div className="mt-1 md:mt-2 h-1 md:h-1.5 bg-slate-800 rounded-full overflow-hidden w-full">
+                <div className="mt-1 md:mt-2 h-1 md:h-1.5 bg-slate-800 rounded-full overflow-hidden w-full border border-transparent group-hover:border-slate-700 transition-colors">
                     <div className="h-full bg-green-500" style={{ width: `${(entity.stats.hp / entity.stats.maxHp) * 100}%` }} />
                 </div>
             </div>

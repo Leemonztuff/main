@@ -1,6 +1,7 @@
 
 import { ASSETS } from '../constants';
 import { TerrainType, Entity } from '../types';
+import { useContentStore } from '../store/contentStore';
 
 /**
  * Service to centralize asset logic.
@@ -77,7 +78,20 @@ export const AssetManager = {
         const decos = AssetManager.getBiomeDecorations(terrain);
         const units = AssetManager.getEntitySprites(entities);
         
-        const all = [...new Set([...blocks, ...decos, ...units])];
+        // Dynamic Live Ops check: Also check ContentStore for any enemies that might spawn in this terrain
+        // (Just in case entities array passed is empty but enemies are about to spawn)
+        const contentState = useContentStore.getState();
+        const encounterList = contentState.encounters[terrain];
+        const extraEnemySprites: string[] = [];
+        
+        if (encounterList) {
+            encounterList.forEach(id => {
+                const def = contentState.enemies[id];
+                if (def && def.sprite) extraEnemySprites.push(def.sprite);
+            });
+        }
+
+        const all = [...new Set([...blocks, ...decos, ...units, ...extraEnemySprites])];
         // Final strict filter
         return all.filter(url => url && typeof url === 'string' && !url.includes('undefined') && !url.includes('null'));
     }

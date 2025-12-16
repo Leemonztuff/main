@@ -1,5 +1,6 @@
 
 import { HexCell, TerrainType, WeatherType, Dimension } from '../types';
+import { useContentStore } from '../store/contentStore';
 
 // --- NOISE MATH HELPERS ---
 class Mulberry32 {
@@ -196,17 +197,20 @@ export class WorldGenerator {
     static getTile(q: number, r: number, dimension: Dimension): HexCell {
         if (!this.isInitialized) this.init(12345);
 
-        // Scale coordinates for noise
-        const scale = 0.05; 
+        // ACCESS DYNAMIC CONFIG
+        const config = useContentStore.getState().gameConfig || { mapScale: 0.12, moistureOffset: 150, tempOffset: 300 };
+        
+        // Scale coordinates for noise (use dynamic mapScale)
+        const scale = config.mapScale; 
         const x = (q * Math.sqrt(3) + r * Math.sqrt(3)/2) * scale;
         const y = (r * 3/2) * scale;
 
-        // 1. GENERATE NOISE MAPS
+        // 1. GENERATE NOISE MAPS (Offsets from Config)
         const elevation = fbm(x, y, 4, 0.5, 2.0); 
-        const moisture = fbm(x + 123.45, y + 67.89, 3, 0.5, 2.0);
+        const moisture = fbm(x + config.moistureOffset, y + 67.89, 3, 0.5, 2.0);
         
         const latitudeFactor = 1 - Math.abs(r) / 50; 
-        const tempNoise = noise2D(x * 0.5 - 500, y * 0.5);
+        const tempNoise = noise2D(x * 0.5 - config.tempOffset, y * 0.5);
         const temperature = (latitudeFactor * 1.5 - 0.5) + (tempNoise * 0.4); 
 
         // 2. DETERMINE BIOME
@@ -230,9 +234,9 @@ export class WorldGenerator {
         const px = (pCenterX * Math.sqrt(3) + pCenterY * Math.sqrt(3)/2) * scale;
         const py = (pCenterY * 3/2) * scale;
         const pElev = fbm(px, py, 4, 0.5, 2.0);
-        const pMoist = fbm(px + 123.45, py + 67.89, 3, 0.5, 2.0);
+        const pMoist = fbm(px + config.moistureOffset, py + 67.89, 3, 0.5, 2.0);
         const pLat = 1 - Math.abs(pCenterY) / 50;
-        const pTempNoise = noise2D(px * 0.5 - 500, py * 0.5);
+        const pTempNoise = noise2D(px * 0.5 - config.tempOffset, py * 0.5);
         const pTemp = (pLat * 1.5 - 0.5) + (pTempNoise * 0.4);
         const { terrain: provinceTerrain } = getBiome(pElev, pMoist, pTemp, dimension);
 

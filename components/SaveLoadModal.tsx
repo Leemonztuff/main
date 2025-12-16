@@ -48,10 +48,14 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({ mode, onClose }) =
                         <h2 className="text-2xl font-serif font-bold text-amber-100 uppercase tracking-widest">
                             {mode === 'save' ? 'Save Game' : 'Load Game'}
                         </h2>
-                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full ${userSession ? 'bg-green-500' : 'bg-slate-500'}`} />
-                            {userSession ? 'Connected to Cloud Storage' : 'Local Storage Only'}
-                        </p>
+                        <div className="text-xs mt-1 flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${userSession ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-500'}`} />
+                            {userSession ? (
+                                <span className="text-green-400 font-bold">Cloud Sync Active</span>
+                            ) : (
+                                <span className="text-slate-500">Local Storage (Login to sync)</span>
+                            )}
+                        </div>
                     </div>
                     <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-800 hover:bg-red-900 text-slate-400 hover:text-white transition-colors">✕</button>
                 </div>
@@ -59,7 +63,7 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({ mode, onClose }) =
                 {/* Slots Grid */}
                 <div className="p-8 grid grid-cols-1 gap-4 overflow-y-auto">
                     {loading ? (
-                        <div className="text-center text-slate-500 py-12 animate-pulse">Scanning Dimensions...</div>
+                        <div className="text-center text-slate-500 py-12 animate-pulse font-mono uppercase tracking-widest">Scanning Dimensions...</div>
                     ) : (
                         slots.map((slot, index) => (
                             <button
@@ -76,8 +80,16 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({ mode, onClose }) =
                                 `}
                             >
                                 <div className="flex items-center gap-6">
-                                    <div className="text-4xl font-serif font-bold text-slate-700 select-none group-hover:text-slate-600 transition-colors">
-                                        {index + 1}
+                                    <div className="relative">
+                                        <div className="text-4xl font-serif font-bold text-slate-700 select-none group-hover:text-slate-600 transition-colors">
+                                            {index + 1}
+                                        </div>
+                                        {/* Cloud Indicator Badge */}
+                                        {slot && userSession && (
+                                            <div className="absolute -top-1 -right-3 text-[10px] bg-blue-900/50 text-blue-300 px-1 rounded border border-blue-500/30 backdrop-blur">
+                                                ☁️
+                                            </div>
+                                        )}
                                     </div>
                                     
                                     {slot ? (
@@ -88,10 +100,10 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({ mode, onClose }) =
                                                     Lvl {slot.summary.level} {slot.summary.class}
                                                 </span>
                                             </div>
-                                            <div className="text-xs text-slate-400 font-mono">
-                                                {slot.summary.location}
+                                            <div className="text-xs text-slate-400 font-mono flex items-center gap-2">
+                                                <span>📍</span> {slot.summary.location}
                                             </div>
-                                            <div className="text-[10px] text-slate-500 mt-2">
+                                            <div className="text-[10px] text-slate-500 mt-2 font-mono">
                                                 {new Date(slot.timestamp).toLocaleString()}
                                             </div>
                                         </div>
@@ -103,7 +115,7 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({ mode, onClose }) =
                                 </div>
 
                                 {slot && (
-                                    <div className="w-8 h-8 opacity-20 group-hover:opacity-100 transition-opacity">
+                                    <div className="w-10 h-10 opacity-20 group-hover:opacity-100 transition-opacity grayscale group-hover:grayscale-0">
                                         <img 
                                             src={CLASS_CONFIG[slot.summary.class]?.icon} 
                                             alt={slot.summary.class}

@@ -1,100 +1,54 @@
 
 import { StateCreator } from 'zustand';
-import {
-    GameState, TerrainType, WeatherType, BattleCell, BattleAction, Spell, Entity,
-    CombatStatsComponent, PositionComponent, DamagePopup, SpellEffectData, SpellType,
-    CharacterClass, VisualComponent, AIBehavior, LootDrop, ItemRarity, Item,
+import { 
+    GameState, TerrainType, WeatherType, BattleCell, BattleAction, Spell, Entity, 
+    CombatStatsComponent, PositionComponent, DamagePopup, SpellEffectData, SpellType, 
+    CharacterClass, VisualComponent, AIBehavior, LootDrop, ItemRarity, Item, 
     EquipmentSlot, Dimension, InventorySlot, CharacterRace, DamageType, Ability, Skill, CreatureType
 } from '../../types';
 import { findBattlePath, getReachableTiles } from '../../services/pathfinding';
-import { rollD20, rollDice, checkLineOfSight, calculateAttackRoll, calculateDamage, calculateFinalDamage, calculateEnemyStats, getAttackRange, calculateSpellAttackRoll, calculateSpellDC, getModifier, isFlanking, calculateHitChance, getAoETiles } from '../../services/dndRules';
+import { rollD20, rollDice, checkLineOfSight, calculateAttackRoll, calculateDamage, calculateFinalDamage, calculateEnemyStats, getAttackRange, calculateSpellAttackRoll, calculateSpellDC, getModifier, isFlanking, calculateHitChance, getAoETiles, calculateAC } from '../../services/dndRules';
 import { sfx } from '../../services/SoundSystem';
-import { resolveEffect } from '../../services/effectResolver';
-import { ASSETS, BASE_STATS, BATTLE_MAP_SIZE, TERRAIN_COLORS, DIFFICULTY_SETTINGS, ITEMS, SPELLS, CORRUPTION_THRESHOLDS, SKILLS, TERRAIN_MOVEMENT_COST, getSprite } from '../../constants';
+import { ASSETS, BATTLE_MAP_SIZE, TERRAIN_COLORS, TERRAIN_MOVEMENT_COST, SPELLS, SKILLS } from '../../constants';
 import { useContentStore } from '../contentStore';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-export interface BattleSlice {
-    battleEntities: (Entity & { stats: CombatStatsComponent, position: PositionComponent, visual: VisualComponent })[];
-    inspectedEntityId: string | null;
-    turnOrder: string[];
-    currentTurnIndex: number;
-    battleTerrain: TerrainType;
-    battleWeather: WeatherType;
-    battleRewards: { xp: number, gold: number, items: any[] };
-    battleMap: BattleCell[];
-    lootDrops: LootDrop[];
-    selectedAction: BattleAction | null;
-    selectedSpell: Spell | null;
-    selectedSkill: Skill | null;
-    hasMoved: boolean;
-    hasActed: boolean;
-    selectedTile: { x: number, z: number } | null;
-    hoveredEntity: Entity | null;
-    runAvailable: boolean;
-    damagePopups: DamagePopup[];
-    activeSpellEffect: SpellEffectData | null;
-    isActionAnimating: boolean;
-    isSkillSelectionMode: boolean;
-
-    startBattle: (terrain: TerrainType, weather: WeatherType, enemyId?: string) => void;
-    selectAction: (action: BattleAction | null) => void;
-    selectSpell: (spellId: string) => void;
-    selectSkill: (skillId: string) => void;
-    inspectUnit: (entityId: string) => void;
-    closeInspection: () => void;
-    setSkillSelectionMode: (enabled: boolean) => void;
-    handleTileHover: (x: number, z: number) => void;
-    handleTileInteraction: (x: number, z: number) => void;
-    collectLoot: (dropId: string) => void;
-    nextTurn: () => void;
-    processStartOfTurn: (entityId: string) => Promise<boolean>;
-    attemptRun: () => void;
-    restartBattle: () => void;
-    continueAfterVictory: () => void;
-    hasLineOfSight: (source: PositionComponent, target: PositionComponent) => boolean;
-    getAttackPrediction: () => any | null;
-    checkBattleEnd: () => void;
-    performEnemyTurn: () => void;
-    performSkill: (x: number, z: number) => void;
-    removeDamagePopup: (id: string) => void;
-}
-
 // --- HELPERS ---
-const generateBattleGrid = (terrainType: TerrainType, terrainCosts: Record<TerrainType, number>, terrainColors: Record<TerrainType, string>): BattleCell[] => {
+
+const generateBattleGrid = (terrainType: TerrainType): BattleCell[] => {
     const size = BATTLE_MAP_SIZE;
     const grid: BattleCell[] = [];
     const safeTerrain = terrainType || TerrainType.GRASS;
-
+    
     let floorTex = ASSETS.BLOCK_TEXTURES[safeTerrain] || ASSETS.BLOCK_TEXTURES[TerrainType.GRASS]!;
-    let wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.MOUNTAIN]!;
-
+    let wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.MOUNTAIN]!; 
+    
     if (safeTerrain === TerrainType.DESERT) wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.DESERT]!;
-    if (safeTerrain === TerrainType.CASTLE || safeTerrain === TerrainType.RUINS) {
-        floorTex = ASSETS.BLOCK_TEXTURES[TerrainType.STONE_FLOOR]!;
-        wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.CASTLE]!;
+    if (safeTerrain === TerrainType.CASTLE || safeTerrain === TerrainType.RUINS) { 
+        floorTex = ASSETS.BLOCK_TEXTURES[TerrainType.STONE_FLOOR]!; 
+        wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.CASTLE]!; 
     }
     if (safeTerrain === TerrainType.SWAMP) wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.SWAMP]!;
-    if (safeTerrain === TerrainType.VILLAGE) {
-        floorTex = ASSETS.BLOCK_TEXTURES[TerrainType.GRASS]!;
-        wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.VILLAGE]!;
+    if (safeTerrain === TerrainType.VILLAGE) { 
+        floorTex = ASSETS.BLOCK_TEXTURES[TerrainType.GRASS]!; 
+        wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.VILLAGE]!; 
     }
     if (safeTerrain === TerrainType.COBBLESTONE) floorTex = ASSETS.BLOCK_TEXTURES[TerrainType.COBBLESTONE]!;
     if (safeTerrain === TerrainType.CAVE_FLOOR) wallTex = ASSETS.BLOCK_TEXTURES[TerrainType.MOUNTAIN]!;
 
     const noise = (x: number, z: number, freq: number = 0.5) => Math.sin(x * freq) + Math.cos(z * freq) + Math.sin((x + z) * freq * 0.5);
-    const baseTerrainCost = terrainCosts[safeTerrain] || 1;
+    const baseTerrainCost = TERRAIN_MOVEMENT_COST[safeTerrain] || 1;
 
-    for (let x = 0; x < size; x++) {
-        for (let z = 0; z < size; z++) {
-            let height = 1;
-            let offsetY = 0;
-            let textureUrl = floorTex;
+    for(let x = 0; x < size; x++) {
+        for(let z = 0; z < size; z++) {
+            let height = 1; 
+            let offsetY = 0; 
+            let textureUrl = floorTex; 
             let isObstacle = false;
             let blocksSight = false;
-            let movementCost = baseTerrainCost;
-            let color = terrainColors[safeTerrain] || '#4ade80';
+            let movementCost = baseTerrainCost; 
+            let color = TERRAIN_COLORS[safeTerrain] || '#4ade80';
 
             if ([TerrainType.MOUNTAIN, TerrainType.DESERT, TerrainType.TAIGA, TerrainType.TUNDRA].includes(safeTerrain)) {
                 const n = noise(x, z, 0.35);
@@ -102,14 +56,14 @@ const generateBattleGrid = (terrainType: TerrainType, terrainCosts: Record<Terra
                 if (n > 0.8) { height = 1.7; movementCost = Math.max(movementCost, 3); }
                 if (n > 1.2) { height = 2.5; isObstacle = true; blocksSight = true; textureUrl = wallTex; }
             } else if ([TerrainType.FOREST, TerrainType.JUNGLE, TerrainType.SWAMP].includes(safeTerrain)) {
-                if (Math.random() > 0.85) { height = 2.0; isObstacle = true; blocksSight = true; textureUrl = ASSETS.BLOCK_TEXTURES[TerrainType.FOREST]!; }
+                 if (Math.random() > 0.85) { height = 2.0; isObstacle = true; blocksSight = true; textureUrl = ASSETS.BLOCK_TEXTURES[TerrainType.FOREST]!; }
             } else if ([TerrainType.CASTLE, TerrainType.RUINS].includes(safeTerrain)) {
-                if (x % 4 === 0 && z % 4 === 0) { height = 3; isObstacle = true; blocksSight = true; textureUrl = wallTex; }
+                 if (x % 4 === 0 && z % 4 === 0) { height = 3; isObstacle = true; blocksSight = true; textureUrl = wallTex; }
             }
 
             if (x > 4 && x < size - 5 && z > 4 && z < size - 5) {
                 isObstacle = false; height = 1; textureUrl = floorTex; blocksSight = false;
-                movementCost = Math.min(baseTerrainCost, 1.5);
+                movementCost = Math.min(baseTerrainCost, 1.5); 
             }
 
             grid.push({ x, z, height, offsetY, color, textureUrl, isObstacle, blocksSight, movementCost });
@@ -118,826 +72,902 @@ const generateBattleGrid = (terrainType: TerrainType, terrainCosts: Record<Terra
     return grid;
 };
 
+const applyDamageToEntity = (entity: any, damage: number, popups: DamagePopup[]): any => {
+    let newEntity = { ...entity };
+    let newStats = { ...newEntity.stats };
+    
+    if (newStats.originalStats && newStats.hp - damage <= 0) {
+        const excessDamage = Math.abs(newStats.hp - damage);
+        const original = newStats.originalStats;
+        const originalSprite = newStats.originalSprite;
+        newStats = { ...newStats, ...original };
+        delete newStats.originalStats;
+        delete newStats.originalSprite;
+        newStats.hp = Math.max(0, (newStats.hp || 1) - excessDamage);
+        if (originalSprite) {
+            newEntity.visual = { ...newEntity.visual, spriteUrl: originalSprite };
+        }
+    } else {
+        newStats.hp = Math.max(0, newStats.hp - damage);
+    }
+    newEntity.stats = newStats;
+    return newEntity;
+};
+
+// --- AI STRATEGY PATTERN ---
+
+interface AIContext {
+    entity: Entity;
+    allEntities: Entity[];
+    map: BattleCell[];
+    actions: {
+        move: (path: any[]) => Promise<void>;
+        attack: (targetId: string) => Promise<void>;
+        cast: (spellId: string, targetPos: PositionComponent) => Promise<void>;
+        pass: () => void;
+    };
+    log: (msg: string, type: any) => void;
+}
+
+const findClosestTarget = (actor: Entity, targets: Entity[]) => {
+    let closest: Entity | null = null;
+    let minDist = 999;
+    
+    targets.forEach(t => {
+        if (t.stats.hp <= 0) return;
+        const dist = Math.abs(actor.position.x - t.position.x) + Math.abs(actor.position.y - t.position.y);
+        if (dist < minDist) {
+            minDist = dist;
+            closest = t;
+        }
+    });
+    return { target: closest, dist: minDist };
+};
+
+const AIStrategies: Record<string, (ctx: AIContext) => Promise<void>> = {
+    [AIBehavior.BASIC_MELEE]: async ({ entity, allEntities, map, actions }) => {
+        const players = allEntities.filter(e => e.type === 'PLAYER' && e.stats.hp > 0);
+        if (players.length === 0) return actions.pass();
+
+        const { target, dist } = findClosestTarget(entity, players);
+        if (!target) return actions.pass();
+
+        const attackRange = getAttackRange(entity);
+
+        if (dist <= attackRange) {
+            await actions.attack(target.id);
+            return;
+        }
+
+        const path = findBattlePath(entity.position, target.position, map);
+        if (path && path.length > 0) {
+            const speed = Math.floor(entity.stats.speed / 5);
+            const movePath = path.slice(0, speed);
+            const endPos = movePath[movePath.length - 1] || entity.position;
+            const endZ = (endPos as any).z !== undefined ? (endPos as any).z : (endPos as any).y;
+            const newDist = Math.abs(endPos.x - target.position.x) + Math.abs(endZ - target.position.y);
+            
+            await actions.move(movePath);
+            
+            if (newDist <= attackRange) {
+                await actions.attack(target.id);
+            } else {
+                actions.pass();
+            }
+        } else {
+            actions.pass();
+        }
+    },
+    [AIBehavior.DEFENSIVE]: async ({ entity, allEntities, map, actions }) => {
+        const players = allEntities.filter(e => e.type === 'PLAYER' && e.stats.hp > 0);
+        if (players.length === 0) return actions.pass();
+
+        const { target, dist } = findClosestTarget(entity, players);
+        if (!target) return actions.pass();
+
+        const maxRange = getAttackRange(entity);
+        const idealRange = maxRange - 1;
+
+        if (dist <= 2) {
+            await actions.attack(target.id); 
+        } else if (dist <= maxRange && checkLineOfSight(entity.position, target.position, map)) {
+            await actions.attack(target.id);
+        } else {
+            const path = findBattlePath(entity.position, target.position, map);
+            if (path) {
+                const speed = Math.floor(entity.stats.speed / 5);
+                const stopIndex = Math.max(0, path.length - idealRange); 
+                const movePath = path.slice(0, Math.min(speed, stopIndex));
+                
+                if (movePath.length > 0) await actions.move(movePath);
+                
+                const newDist = Math.abs((movePath[movePath.length-1]?.x || entity.position.x) - target.position.x) + 
+                                Math.abs((movePath[movePath.length-1]?.z || entity.position.y) - target.position.y);
+                
+                if (newDist <= maxRange) await actions.attack(target.id);
+                else actions.pass();
+            } else {
+                actions.pass();
+            }
+        }
+    },
+    [AIBehavior.HEALER]: async ({ entity, allEntities, map, actions, log }) => {
+        const allies = allEntities.filter(e => e.type === 'ENEMY' && e.id !== entity.id && e.stats.hp > 0);
+        const injured = allies.filter(a => (a.stats.hp / a.stats.maxHp) < 0.6).sort((a,b) => a.stats.hp - b.stats.hp);
+        
+        if (injured.length > 0) {
+            const target = injured[0];
+            const dist = Math.abs(entity.position.x - target.position.x) + Math.abs(entity.position.y - target.position.y);
+            const healRange = 6;
+
+            if (dist <= healRange) {
+                log(`${entity.name} chants a healing prayer!`, "combat");
+                const spellId = 'cure_wounds'; 
+                await actions.cast(spellId, target.position);
+                return;
+            } else {
+                const path = findBattlePath(entity.position, target.position, map);
+                if (path) {
+                    const speed = Math.floor(entity.stats.speed / 5);
+                    const movePath = path.slice(0, Math.min(speed, path.length - 1));
+                    if (movePath.length > 0) await actions.move(movePath);
+                    const newDist = Math.abs((movePath[movePath.length-1]?.x || entity.position.x) - target.position.x) + 
+                                    Math.abs((movePath[movePath.length-1]?.z || entity.position.y) - target.position.y);
+                    if (newDist <= healRange) {
+                        await actions.cast('cure_wounds', target.position);
+                        return;
+                    }
+                }
+            }
+        }
+        return AIStrategies[AIBehavior.SPELLCASTER]({ entity, allEntities, map, actions, log });
+    },
+    [AIBehavior.SPELLCASTER]: async ({ entity, allEntities, map, actions, log }) => {
+        const players = allEntities.filter(e => e.type === 'PLAYER' && e.stats.hp > 0);
+        const { target, dist } = findClosestTarget(entity, players);
+        if (!target) return actions.pass();
+
+        const spells = ['fireball', 'magic_missile', 'guiding_bolt']; 
+        const spellId = spells[0]; 
+        const spellRange = 8;
+
+        if (dist <= spellRange && checkLineOfSight(entity.position, target.position, map)) {
+            await actions.cast(spellId, target.position);
+        } else {
+            const path = findBattlePath(entity.position, target.position, map);
+            if (path) {
+                const speed = Math.floor(entity.stats.speed / 5);
+                const stopIndex = Math.max(0, path.length - (spellRange - 1)); 
+                const movePath = path.slice(0, Math.min(speed, stopIndex));
+                if (movePath.length > 0) await actions.move(movePath);
+                
+                const newDist = Math.abs((movePath[movePath.length-1]?.x || entity.position.x) - target.position.x) + 
+                                Math.abs((movePath[movePath.length-1]?.z || entity.position.y) - target.position.y);
+                
+                if (newDist <= spellRange) {
+                    await actions.cast(spellId, target.position);
+                } else {
+                    actions.pass();
+                }
+            } else {
+                actions.pass();
+            }
+        }
+    }
+};
+
+// --- ACTION RESOLUTION STRATEGY PATTERN ---
+
+interface ActionContext {
+    caster: Entity;
+    target: Entity;
+    source: Spell | Skill; // The thing being used
+    popupList: DamagePopup[];
+}
+
+interface ActionResult {
+    newEntity: Entity;
+    popup: Partial<DamagePopup>;
+    logMsg: string;
+}
+
+const EffectStrategies: Record<string, (ctx: ActionContext) => ActionResult> = {
+    // DAMAGE STRATEGY: Handles rolls, crits, resistance, and application
+    'DAMAGE': ({ caster, target, source }) => {
+        // Logic assumes magic attack roll for Spells, physical for Skills generally
+        // For simplicity, we use magic attack roll if it's a spell or magic skill
+        const isSpell = (source as any).level !== undefined; // Duck typing check
+        
+        let total = 0;
+        let isCrit = false;
+        
+        if (isSpell) {
+            const roll = calculateSpellAttackRoll(caster);
+            total = roll.total;
+            isCrit = roll.isCrit;
+        } else {
+            const roll = calculateAttackRoll(caster);
+            total = roll.total;
+            isCrit = roll.isCrit;
+        }
+
+        const ac = target.stats.ac;
+        
+        // Auto-hit for AoE usually (simplified), or check AC for targeted
+        const hit = source.aoeRadius ? true : (total >= ac);
+        
+        if (hit) {
+            const rawDmg = rollDice(source.diceSides || 6, source.diceCount || 1) * (isCrit ? 2 : 1);
+            const dmgMult = (source as Skill).damageMultiplier || 1; // Skills might have multipliers
+            const { finalDamage } = calculateFinalDamage(Math.floor(rawDmg * dmgMult), source.damageType || DamageType.MAGIC, target, true);
+            
+            const newEntity = applyDamageToEntity(target, finalDamage, []);
+            const color = source.damageType === DamageType.FIRE ? '#ef4444' : (source.damageType === DamageType.RADIANT ? '#fbbf24' : '#a855f7');
+            
+            return {
+                newEntity,
+                popup: { amount: finalDamage, color, isCrit },
+                logMsg: `hits ${target.name} for ${finalDamage} (${source.damageType})`
+            };
+        } else {
+            return {
+                newEntity: target,
+                popup: { amount: "MISS", color: '#94a3b8', isCrit: false },
+                logMsg: `missed ${target.name}`
+            };
+        }
+    },
+
+    // HEAL STRATEGY: Handles positive HP restoration
+    'HEAL': ({ caster, target, source }) => {
+        const heal = rollDice(source.diceSides || 4, source.diceCount || 1);
+        const newHp = Math.min(target.stats.maxHp, target.stats.hp + heal);
+        
+        const newEntity = { ...target, stats: { ...target.stats, hp: newHp } };
+        
+        return {
+            newEntity,
+            popup: { amount: `+${heal}`, color: '#22c55e', isCrit: false },
+            logMsg: `heals ${target.name} for ${heal}`
+        };
+    },
+
+    // STATUS/UTILITY STRATEGY: Handles buffs or non-damage effects
+    'APPLY_EFFECT': ({ caster, target, source }) => {
+        const skill = source as Skill;
+        const effectName = skill.statusEffect || 'EFFECT';
+        
+        const newStatus = { ...(target.stats.statusEffects || {}) };
+        newStatus[effectName] = 3; // Default 3 turns
+        
+        const newEntity = { ...target, stats: { ...target.stats, statusEffects: newStatus } };
+        
+        return {
+            newEntity,
+            popup: { amount: effectName, color: '#3b82f6', isCrit: false },
+            logMsg: `applied ${effectName} to ${target.name}`
+        };
+    },
+    
+    // HEAL_SELF strategy for skills like Second Wind
+    'HEAL_SELF': ({ caster, target, source }) => {
+        // Force target to be caster just in case, though interaction layer handles this
+        const heal = rollDice(10, 1) + caster.stats.level; // Standard Second Wind logic
+        const newHp = Math.min(caster.stats.maxHp, caster.stats.hp + heal);
+        
+        const newEntity = { ...caster, stats: { ...caster.stats, hp: newHp } };
+        
+        return {
+            newEntity,
+            popup: { amount: `+${heal}`, color: '#22c55e', isCrit: false },
+            logMsg: `regains ${heal} HP`
+        };
+    }
+};
+
+// --- SLICE DEFINITION ---
+
+export interface BattleSlice {
+  battleEntities: Entity[];
+  turnOrder: string[];
+  currentTurnIndex: number;
+  battleMap: BattleCell[] | null;
+  battleTerrain: TerrainType;
+  battleWeather: WeatherType;
+  battleRewards: { xp: number, gold: number, items: Item[] };
+  
+  selectedTile: { x: number, z: number } | null;
+  hoveredEntity: Entity | null;
+  selectedAction: BattleAction | null;
+  selectedSpell: Spell | null;
+  selectedSkill: Skill | null;
+  hasMoved: boolean;
+  hasActed: boolean;
+  
+  damagePopups: DamagePopup[];
+  activeSpellEffect: SpellEffectData | null;
+  lootDrops: LootDrop[];
+  
+  isActionAnimating: boolean;
+  
+  inspectedEntityId: string | null;
+
+  startBattle: (terrain: TerrainType, weather: WeatherType, enemyId?: string) => void;
+  initializeBattle: (entities: Entity[], terrain: TerrainType, weather: WeatherType) => void;
+  handleTileInteraction: (x: number, z: number) => void;
+  selectAction: (action: BattleAction) => void;
+  selectSpell: (spellId: string) => void;
+  selectSkill: (skillId: string) => void;
+  moveEntity: (path: any[]) => Promise<void>;
+  performAttack: (targetId: string) => Promise<void>;
+  performMagic: (targetPos: { x: number, y: number }) => Promise<void>;
+  performSkill: (targetPos: { x: number, y: number }) => Promise<void>;
+  endTurn: () => void;
+  nextTurn: () => void;
+  attemptRun: () => void;
+  
+  performEnemyTurn: () => Promise<void>;
+  
+  handleTileHover: (x: number, z: number) => void;
+  inspectUnit: (id: string) => void;
+  closeInspection: () => void;
+  
+  removeDamagePopup: (id: string) => void;
+  continueAfterVictory: () => void;
+  restartBattle: () => void;
+  hasLineOfSight: (targetId: string) => boolean;
+}
+
 export const createBattleSlice: StateCreator<any, [], [], BattleSlice> = (set, get) => ({
-    battleEntities: [],
-    inspectedEntityId: null,
-    turnOrder: [],
-    currentTurnIndex: 0,
-    battleTerrain: TerrainType.GRASS,
-    battleWeather: WeatherType.NONE,
-    battleRewards: { xp: 0, gold: 0, items: [] },
-    battleMap: [],
-    lootDrops: [],
-    selectedAction: null,
-    selectedSpell: null,
-    selectedSkill: null,
-    hasMoved: false,
-    hasActed: false,
-    selectedTile: null,
-    hoveredEntity: null,
-    runAvailable: true,
-    damagePopups: [],
-    activeSpellEffect: null,
-    isActionAnimating: false,
-    isSkillSelectionMode: false,
-
-    startBattle: (terrain, weather, enemyId) => {
-        // sfx.playAttack(); // Moved to Cinematic Logic in UIOverlay 
-        const state = get();
-        const contentState = useContentStore.getState();
-        const party = state.party || [];
-        const activeOverworldEnemies = state.activeOverworldEnemies || [];
-        const difficulty = state.difficulty || 'NORMAL';
-
-        if (party.length === 0) {
-            get().addLog("Cannot start battle: No party members!", "info");
-            return;
-        }
-
-        const map = generateBattleGrid(terrain, contentState.terrainCosts, contentState.terrainColors);
-        const entities: any[] = [];
-        const usedPositions = new Set<string>();
-
-        // 1. Place Players
-        party.forEach((p: any) => {
-            if (!p) return;
-            let placed = false;
-            let attempt = 0;
-            while (!placed && attempt < 50) {
-                const ox = Math.floor(BATTLE_MAP_SIZE / 2) + Math.floor((Math.random() - 0.5) * 4);
-                const oy = Math.floor(BATTLE_MAP_SIZE / 2) + Math.floor((Math.random() - 0.5) * 4);
-                const key = `${ox},${oy}`;
-                const cell = map.find(c => c.x === ox && c.z === oy);
-                if (cell && !cell.isObstacle && !usedPositions.has(key)) {
-                    entities.push({ ...p, position: { x: ox, y: oy }, stats: { ...p.stats, activeCooldowns: {} } });
-                    usedPositions.add(key);
-                    placed = true;
-                }
-                attempt++;
-            }
-        });
-
-        // 2. Generate Enemies
-        const enemyCount = Math.floor(Math.random() * 2) + 2;
-
-        const enemyDefs = contentState ? contentState.enemies : {};
-
-        const triggerEnemy = activeOverworldEnemies.find((e: any) => e.id === enemyId);
-        const enemyDefKeys = Object.keys(enemyDefs);
-        let mainEnemyDefId = triggerEnemy ? triggerEnemy.defId : (enemyDefKeys.length > 0 ? enemyDefKeys[0] : 'goblin_spearman');
-        let mainEnemyDef = enemyDefs[mainEnemyDefId] || enemyDefs['goblin_spearman'];
-        const playerLevel = (party[0] && party[0].stats) ? party[0].stats.level : 1;
-
-        for (let i = 0; i < enemyCount; i++) {
-            let placed = false;
-            let attempt = 0;
-            while (!placed && attempt < 50) {
-                const edge = Math.floor(Math.random() * 4);
-                let ex = 0, ey = 0;
-                if (edge === 0) { ex = Math.floor(Math.random() * BATTLE_MAP_SIZE); ey = 0; }
-                else if (edge === 1) { ex = Math.floor(Math.random() * BATTLE_MAP_SIZE); ey = BATTLE_MAP_SIZE - 1; }
-                else if (edge === 2) { ex = 0; ey = Math.floor(Math.random() * BATTLE_MAP_SIZE); }
-                else { ex = BATTLE_MAP_SIZE - 1; ey = Math.floor(Math.random() * BATTLE_MAP_SIZE); }
-
-                if (ex === 0) ex += 1; if (ex === BATTLE_MAP_SIZE - 1) ex -= 1;
-                if (ey === 0) ey += 1; if (ey === BATTLE_MAP_SIZE - 1) ey -= 1;
-
-                const key = `${ex},${ey}`;
-                const cell = map.find(c => c.x === ex && c.z === ey);
-
-                if (cell && !cell.isObstacle && !usedPositions.has(key)) {
-                    let def = mainEnemyDef;
-                    let defId = mainEnemyDefId;
-                    if (i > 0 && Math.random() > 0.7 && enemyDefKeys.length > 1) {
-                        const rndKey = enemyDefKeys[Math.floor(Math.random() * enemyDefKeys.length)];
-                        if (enemyDefs[rndKey]) { def = enemyDefs[rndKey]; defId = rndKey; }
-                    }
-
-                    const stats = calculateEnemyStats(def, playerLevel, difficulty, contentState.difficultySettings);
-
-                    let ai = AIBehavior.BASIC_MELEE;
-                    if (def.type === CreatureType.UNDEAD && def.id.includes('archer')) ai = AIBehavior.DEFENSIVE;
-                    if (def.type === CreatureType.HUMANOID && (def.id.includes('sorcerer') || def.id.includes('necromancer'))) ai = AIBehavior.SPELLCASTER;
-                    if (def.type === CreatureType.BEAST) ai = AIBehavior.AGRESSIVE_BEAST;
-                    if (def.name.includes("Priest") || def.name.includes("Shaman")) ai = AIBehavior.HEALER;
-
-                    entities.push({
-                        id: `enemy_${generateId()}`,
-                        defId: defId,
-                        name: def.name,
-                        type: 'ENEMY',
-                        position: { x: ex, y: ey },
-                        stats,
-                        visual: { color: '#ef4444', modelType: 'billboard', spriteUrl: def.sprite },
-                        aiBehavior: ai
-                    });
-                    usedPositions.add(key);
-                    placed = true;
-                }
-                attempt++;
-            }
-        }
-
-        const turnOrder = entities
-            .map(e => ({ id: e.id, init: rollD20().result + (e.stats.initiativeBonus || 0) }))
-            .sort((a, b) => b.init - a.init)
-            .map(e => e.id);
-
-        set({
-            gameState: GameState.BATTLE_TACTICAL,
-            battleEntities: entities,
-            battleMap: map,
-            turnOrder,
-            currentTurnIndex: 0,
-            battleTerrain: terrain,
-            battleWeather: weather,
-            selectedAction: null,
-            hasMoved: false,
-            hasActed: false,
-            lootDrops: [],
-            damagePopups: [],
-            inspectedEntityId: null,
-            battleRewards: { xp: 0, gold: 0, items: [] }
-        });
-
-        // Removed generic log, rely on Banner
-
-        // Process first turn
-        const firstId = turnOrder[0];
-        const canAct = get().processStartOfTurn(firstId);
-        // Wait a microtask to ensure state is settled before enemy acts
-        setTimeout(() => {
-            const freshEnt = get().battleEntities.find((e: any) => e.id === firstId);
-            if (canAct && freshEnt && freshEnt.type === 'ENEMY') {
-                get().performEnemyTurn();
-            }
-        }, 100);
-    },
-
-    selectAction: (action) => set({ selectedAction: action, selectedSpell: null, selectedSkill: null, selectedTile: null, isSkillSelectionMode: false }),
-    selectSpell: (spellId) => set({ selectedSpell: SPELLS[spellId] }),
-    selectSkill: (skillId) => set({ selectedSkill: SKILLS[skillId], isSkillSelectionMode: true }),
-
-    inspectUnit: (entityId) => { sfx.playUiClick(); set({ inspectedEntityId: entityId }); },
-    closeInspection: () => { sfx.playUiClick(); set({ inspectedEntityId: null }); },
-    setSkillSelectionMode: (enabled) => set({ isSkillSelectionMode: enabled }),
-
-    handleTileHover: (x, z) => {
-        const { battleEntities } = get();
-        const entity = battleEntities.find(e => e.position.x === x && e.position.y === z);
-        set({ selectedTile: { x, z }, hoveredEntity: entity || null });
-    },
-
-    handleTileInteraction: async (x, z) => {
-        const state = get();
-        const { selectedAction, battleEntities, turnOrder, currentTurnIndex, hasMoved, hasActed, battleMap } = state;
-        const activeEntityId = turnOrder[currentTurnIndex];
-        const activeEntity = battleEntities.find(e => e.id === activeEntityId);
-
-        if (!activeEntity || activeEntity.type !== 'PLAYER') return;
-
-        const targetEntity = battleEntities.find(e => e.position.x === x && e.position.y === z && e.stats.hp > 0);
-
-        // --- MOVEMENT ---
-        if (selectedAction === BattleAction.MOVE) {
-            if (hasMoved) { get().addLog("Already moved this turn.", "info"); return; }
-            if (targetEntity) { get().addLog("Tile blocked.", "info"); return; }
-
-            if (activeEntity.stats.statusEffects && activeEntity.stats.statusEffects['ROOTED']) {
-                get().addLog("You are Rooted!", "info");
-                return;
-            }
-
-            const speedInTiles = Math.floor(activeEntity.stats.speed / 5);
-            const path = findBattlePath({ x: activeEntity.position.x, y: activeEntity.position.y }, { x, y: z }, battleMap);
-
-            if (path && path.length - 1 <= speedInTiles) {
-                set({ isActionAnimating: true });
-                const newEntities = battleEntities.map(e => e.id === activeEntity.id ? { ...e, position: { x, y: z } } : e);
-                set({ battleEntities: newEntities, hasMoved: true, isActionAnimating: false, selectedAction: null });
-                sfx.playStep();
-            } else {
-                get().addLog("Too far!", "info");
-            }
-        }
-
-        // --- MELEE ATTACK ---
-        else if (selectedAction === BattleAction.ATTACK) {
-            if (hasActed) { get().addLog("Already acted this turn.", "info"); return; }
-
-            if (!targetEntity || targetEntity.type !== 'ENEMY') {
-                get().addLog("Select a valid target.", "info");
-                return;
-            }
-
-            const dist = Math.max(Math.abs(activeEntity.position.x - x), Math.abs(activeEntity.position.y - z));
-            const range = getAttackRange(activeEntity);
-
-            if (dist <= range) {
-                if (range > 1.5 && !checkLineOfSight(activeEntity.position, targetEntity.position, battleMap)) {
-                    get().addLog("Line of sight blocked!", "info");
-                    return;
-                }
-
-                set({ isActionAnimating: true });
-                sfx.playAttack();
-                await new Promise(r => setTimeout(r, 400));
-
-                const isSneak = activeEntity.stats.class === CharacterClass.ROGUE && isFlanking(activeEntity, targetEntity, battleEntities);
-                const attackRoll = calculateAttackRoll(activeEntity, EquipmentSlot.MAIN_HAND, isSneak);
-
-                if (attackRoll.total >= targetEntity.stats.ac) {
-                    sfx.playHit();
-                    if (attackRoll.isCrit) sfx.playCrit();
-
-                    const dmgInfo = calculateDamage(activeEntity, EquipmentSlot.MAIN_HAND, attackRoll.isCrit, targetEntity, isSneak);
-                    const { finalDamage, isResistant, isVulnerable, isImmune } = calculateFinalDamage(dmgInfo.amount, dmgInfo.type, targetEntity, dmgInfo.isMagical);
-                    const newHp = Math.max(0, targetEntity.stats.hp - finalDamage);
-
-                    // Cleanup Stealth/Bardic/Guiding Bolt
-                    const newAttackerStats = { ...activeEntity.stats };
-                    let attackerUpdated = false;
-                    if (newAttackerStats.statusEffects) {
-                        if (newAttackerStats.statusEffects['STEALTH']) { delete newAttackerStats.statusEffects['STEALTH']; attackerUpdated = true; }
-                        if (attackRoll.inspirationUsed) { delete newAttackerStats.statusEffects['BARDIC']; attackerUpdated = true; }
-                        if (attackRoll.guidingBoltUsed) { delete newAttackerStats.statusEffects['GUIDING_BOLT_ADV']; attackerUpdated = true; }
-                        if (newAttackerStats.statusEffects['POISON_WEAPON']) { delete newAttackerStats.statusEffects['POISON_WEAPON']; attackerUpdated = true; }
-                    }
-
-                    const newEntities = battleEntities.map(e => {
-                        if (e.id === targetEntity.id) {
-                            // Apply Poison on Hit if weapon poisoned
-                            let targetStats = { ...e.stats, hp: newHp };
-                            if (activeEntity.stats.statusEffects?.['POISON_WEAPON']) {
-                                targetStats.statusEffects = { ...targetStats.statusEffects, 'POISON': 2 };
-                            }
-                            return { ...e, stats: targetStats };
-                        }
-                        if (e.id === activeEntity.id && attackerUpdated) return { ...e, stats: newAttackerStats };
-                        return e;
-                    });
-
-                    let amountDisplay: string | number = finalDamage;
-                    let color = attackRoll.isCrit ? '#fbbf24' : (dmgInfo.isSneakAttack ? '#a855f7' : 'white');
-                    if (isImmune) { amountDisplay = 'IMMUNE'; color = '#94a3b8'; }
-                    else if (isVulnerable) color = '#ef4444';
-                    else if (isResistant) color = '#d97706';
-
-                    const popups = [...state.damagePopups, { id: generateId(), position: [targetEntity.position.x, 0, targetEntity.position.y], amount: amountDisplay, color, isCrit: attackRoll.isCrit, timestamp: Date.now() }];
-
-                    get().addLog(`${activeEntity.name} hits ${targetEntity.name} for ${finalDamage} damage!${attackRoll.isCrit ? ' (CRIT!)' : ''}`, "combat");
-                    set({ battleEntities: newEntities, hasActed: true, damagePopups: popups, isActionAnimating: false, selectedAction: null });
-                    get().checkBattleEnd();
-                } else {
-                    const popups = [...state.damagePopups, { id: generateId(), position: [targetEntity.position.x, 0, targetEntity.position.y], amount: 'MISS', color: '#94a3b8', isCrit: false, timestamp: Date.now() }];
-                    get().addLog(`${activeEntity.name} attacks ${targetEntity.name} but misses.`, "combat");
-                    set({ damagePopups: popups, hasActed: true, isActionAnimating: false, selectedAction: null });
-                }
-            } else {
-                get().addLog("Out of range!", "info");
-            }
-        }
-
-        // --- SKILL/MAGIC ---
-        else if ((selectedAction === BattleAction.MAGIC || selectedAction === BattleAction.SKILL)) {
-            if (hasActed) { get().addLog("Already acted this turn.", "info"); return; }
-            get().performSkill(x, z);
-        }
-    },
-
-    performSkill: async (x, z) => {
-        const state = get();
-        const { selectedSpell, selectedSkill, battleEntities, turnOrder, currentTurnIndex, battleMap } = state;
-        const activeEntityId = turnOrder[currentTurnIndex];
-        const activeEntity = battleEntities.find(e => e.id === activeEntityId);
-        if (!activeEntity) return;
-
-        const skill = selectedSpell || selectedSkill;
-        if (!skill) return;
-
-        // Cooldown Check
-        if ((skill as Skill).cooldown) {
-            const currentCD = activeEntity.stats.activeCooldowns[(skill as Skill).id] || 0;
-            if (currentCD > 0) {
-                get().addLog(`${skill.name} is on cooldown (${currentCD} turns).`, "info");
-                return;
-            }
-        }
-
-        // Range Check
-        const dist = Math.max(Math.abs(activeEntity.position.x - x), Math.abs(activeEntity.position.y - z));
-        if (dist > skill.range) { get().addLog("Target out of range.", "info"); return; }
-        if (skill.range > 1 && !checkLineOfSight(activeEntity.position, { x, y: z }, battleMap)) { get().addLog("Line of sight blocked.", "info"); return; }
-
-        // Determine Targets
-        let targets: any[] = [];
-        const primaryEffect = skill.effects[0];
-
-        // Special Case: Teleport
-        if (primaryEffect.type === 'TELEPORT') {
-            const occupied = battleEntities.some(e => e.position.x === x && e.position.y === z && e.stats.hp > 0);
-            const cell = battleMap.find(c => c.x === x && c.z === z);
-            if (occupied || cell?.isObstacle) {
-                get().addLog("Cannot teleport there!", "info");
-                return;
-            }
-            targets.push(activeEntity);
-        }
-        else if (skill.aoeRadius && skill.aoeRadius > 0) {
-            const tiles = getAoETiles(activeEntity.position, { x, y: z }, skill.aoeType || 'CIRCLE', skill.aoeRadius);
-            targets = battleEntities.filter(e => e.stats.hp > 0 && tiles.some(t => t.x === e.position.x && t.y === e.position.y));
-        } else {
-            // Single Target
-            if (primaryEffect.target === 'SELF') {
-                targets.push(activeEntity);
-            } else {
-                const clickedEntity = battleEntities.find(e => e.position.x === x && e.position.y === z && e.stats.hp > 0);
-                if (clickedEntity) targets.push(clickedEntity);
-            }
-        }
-
-        if (targets.length === 0 && primaryEffect.type !== 'TELEPORT' && primaryEffect.type !== 'SUMMON') {
-            get().addLog("No valid target.", "info");
-            return;
-        }
-
-        set({ isActionAnimating: true });
-        sfx.playMagic();
-
-        // Animation
-        if (skill.animation) {
-            const effectType = skill.aoeRadius ? 'BURST' : (skill.range > 1 ? 'PROJECTILE' : 'BURST');
-            const color = '#a855f7';
-            set({ activeSpellEffect: { id: generateId(), type: effectType, startPos: [activeEntity.position.x, 1.5, activeEntity.position.y], endPos: [x, 0.5, z], color: color, duration: 600, timestamp: Date.now(), animationKey: skill.animation } });
-            await new Promise(r => setTimeout(r, 600));
-            set({ activeSpellEffect: null });
-        }
-
-        // Apply Effects
-        let newEntities = [...battleEntities];
-        const newPopups = [...state.damagePopups];
-
-        for (const effect of skill.effects) {
-            if (effect.type === 'TELEPORT') {
-                const idx = newEntities.findIndex(e => e.id === activeEntity.id);
-                if (idx !== -1) {
-                    newEntities[idx] = { ...newEntities[idx], position: { x, y: z } };
-                    sfx.playMagic();
-                }
-                continue;
-            }
-
-            for (const target of targets) {
-                const result = resolveEffect(effect, activeEntity, target);
-
-                const tIndex = newEntities.findIndex(e => e.id === target.id);
-                if (tIndex === -1) continue;
-                let targetEntity = newEntities[tIndex];
-
-                if (result.damage) {
-                    const newHp = Math.max(0, targetEntity.stats.hp - result.damage.amount);
-                    targetEntity = { ...targetEntity, stats: { ...targetEntity.stats, hp: newHp } };
-                    newPopups.push({ id: generateId(), position: [target.position.x, 0, target.position.y], amount: result.damage.amount, color: '#ef4444', isCrit: result.damage.isCrit, timestamp: Date.now() });
-                }
-                if (result.healing) {
-                    const newHp = Math.min(targetEntity.stats.maxHp, targetEntity.stats.hp + result.healing);
-                    targetEntity = { ...targetEntity, stats: { ...targetEntity.stats, hp: newHp } };
-                    newPopups.push({ id: generateId(), position: [target.position.x, 0, target.position.y], amount: `+${result.healing}`, color: '#22c55e', isCrit: false, timestamp: Date.now() });
-                }
-                if (result.statusApplied) {
-                    const currentEffects = { ...(targetEntity.stats.statusEffects || {}) };
-                    currentEffects[result.statusApplied.id] = result.statusApplied.duration;
-                    targetEntity = { ...targetEntity, stats: { ...targetEntity.stats, statusEffects: currentEffects } };
-                    newPopups.push({ id: generateId(), position: [target.position.x, 0, target.position.y], amount: result.statusApplied.id, color: '#3b82f6', isCrit: false, timestamp: Date.now() });
-                }
-                if (result.resourceChange) {
-                    if (result.resourceChange.type === 'MANA') {
-                        const slots = { ...targetEntity.stats.spellSlots };
-                        slots.current = Math.min(slots.max, slots.current + result.resourceChange.amount);
-                        targetEntity = { ...targetEntity, stats: { ...targetEntity.stats, spellSlots: slots } };
-                        newPopups.push({ id: generateId(), position: [target.position.x, 0, target.position.y], amount: `+${result.resourceChange.amount} MP`, color: '#3b82f6', isCrit: false, timestamp: Date.now() });
-                    }
-                }
-                if (result.statMod) {
-                    // Basic implementation: Modify base attribute directly (Note: This is permanent until end of battle if not tracked!)
-                    // Ideally we use a modifier system. For now, let's just apply it and assume it's a permanent buff for the battle.
-                    const attr = result.statMod.stat as Ability;
-                    if (targetEntity.stats.attributes[attr] !== undefined) {
-                        const newAttrs = { ...targetEntity.stats.attributes };
-                        newAttrs[attr] += result.statMod.amount;
-                        targetEntity = { ...targetEntity, stats: { ...targetEntity.stats, attributes: newAttrs } };
-                        newPopups.push({ id: generateId(), position: [target.position.x, 0, target.position.y], amount: `${result.statMod.amount > 0 ? '+' : ''}${result.statMod.amount} ${attr}`, color: '#eab308', isCrit: false, timestamp: Date.now() });
-                    }
-                }
-                if (result.message) {
-                    get().addLog(result.message, "combat");
-                }
-
-                newEntities[tIndex] = targetEntity;
-            }
-        }
-
-        // Apply Cooldowns & Costs
-        const aeIndex = newEntities.findIndex(e => e.id === activeEntity.id);
-        if (aeIndex !== -1) {
-            let ent = newEntities[aeIndex];
-            if ((skill as Skill).cooldown) {
-                const newCD = { ...ent.stats.activeCooldowns, [(skill as Skill).id]: (skill as Skill).cooldown };
-                ent = { ...ent, stats: { ...ent.stats, activeCooldowns: newCD } };
-            }
-            if ((skill as Spell).level && (skill as Spell).level > 0) {
-                const slots = { ...ent.stats.spellSlots };
-                slots.current = Math.max(0, slots.current - 1);
-                ent = { ...ent, stats: { ...ent.stats, spellSlots: slots } };
-            }
-            if ((skill as Skill).staminaCost) {
-                ent = { ...ent, stats: { ...ent.stats, stamina: Math.max(0, ent.stats.stamina - (skill as Skill).staminaCost) } };
-            }
-            newEntities[aeIndex] = ent;
-        }
-
-        const isBonus = (skill as Skill).isBonusAction;
-        set({ battleEntities: newEntities, hasActed: !isBonus, damagePopups: newPopups, isActionAnimating: false, selectedAction: null, selectedSpell: null, selectedSkill: null });
-        get().checkBattleEnd();
-    },
-
-    performEnemyTurn: async () => {
-        const state = get();
-        const { battleEntities, turnOrder, currentTurnIndex, battleMap } = state;
-        const activeEntityId = turnOrder[currentTurnIndex];
-        const activeEntity = battleEntities.find(e => e.id === activeEntityId);
-
-        // AI should only run if it's actually their turn and they are alive
-        if (!activeEntity || activeEntity.type !== 'ENEMY' || activeEntity.stats.hp <= 0) {
-            get().nextTurn();
-            return;
-        }
-
-        await new Promise(r => setTimeout(r, 600));
-
-        // --- AI BRAIN ---
-        const players = battleEntities.filter(e => e.type === 'PLAYER' && e.stats.hp > 0);
-        const allies = battleEntities.filter(e => e.type === 'ENEMY' && e.id !== activeEntity.id && e.stats.hp > 0);
-
-        if (players.length === 0) { get().nextTurn(); return; }
-
-        const behavior = activeEntity.aiBehavior || AIBehavior.BASIC_MELEE;
-
-        let target = players[0];
-        let bestScore = -9999;
-
-        // 1. Target Selection
-        players.forEach(p => {
-            const dist = Math.abs(p.position.x - activeEntity.position.x) + Math.abs(p.position.y - activeEntity.position.y);
-            let score = 100 - dist;
-            if (p.stats.hp < p.stats.maxHp * 0.3) score += 50;
-            if (score > bestScore) { bestScore = score; target = p; }
-        });
-
-        const distToTarget = Math.max(Math.abs(activeEntity.position.x - target.position.x), Math.abs(activeEntity.position.y - target.position.y));
-        let enemyHasActed = false;
-
-        // 2. Specialized Behaviors
-
-        // --- HEALER AI ---
-        if (behavior === AIBehavior.HEALER) {
-            const woundedAlly = allies.find(a => a.stats.hp < a.stats.maxHp * 0.5);
-            if (woundedAlly) {
-                const distToAlly = Math.max(Math.abs(activeEntity.position.x - woundedAlly.position.x), Math.abs(activeEntity.position.y - woundedAlly.position.y));
-                if (distToAlly <= 4 && checkLineOfSight(activeEntity.position, woundedAlly.position, battleMap)) {
-                    set({ isActionAnimating: true });
-                    sfx.playMagic();
-                    await new Promise(r => setTimeout(r, 400));
-                    const healAmt = 10;
-                    const newHp = Math.min(woundedAlly.stats.maxHp, woundedAlly.stats.hp + healAmt);
-                    const newEntities = get().battleEntities.map(e => e.id === woundedAlly.id ? { ...e, stats: { ...e.stats, hp: newHp } } : e);
-                    const popups = [...get().damagePopups, { id: generateId(), position: [woundedAlly.position.x, 0, woundedAlly.position.y], amount: `+${healAmt}`, color: '#22c55e', isCrit: false, timestamp: Date.now() }];
-                    set({ battleEntities: newEntities, damagePopups: popups, isActionAnimating: false });
-                    get().addLog(`${activeEntity.name} heals ${woundedAlly.name}.`, "combat");
-                    enemyHasActed = true;
-                }
-            }
-        }
-
-        // --- SPELLCASTER / ARCHER AI ---
-        if (!enemyHasActed && (behavior === AIBehavior.SPELLCASTER || behavior === AIBehavior.DEFENSIVE)) {
-            // Range check (5 for spells, 6 for bows)
-            const range = behavior === AIBehavior.SPELLCASTER ? 5 : 6;
-
-            if (distToTarget <= range && checkLineOfSight(activeEntity.position, target.position, battleMap)) {
-                // Ranged Attack
-                set({ isActionAnimating: true });
-                sfx.playMagic(); // Reuse magic sound for ranged attacks for simplicity or add bow sound
-                await new Promise(r => setTimeout(r, 400));
-
-                const dmg = calculateDamage(activeEntity);
-                // Spellcaster = Fire damage usually, Archer = Piercing
-                const dmgType = behavior === AIBehavior.SPELLCASTER ? DamageType.FIRE : DamageType.PIERCING;
-                const { finalDamage } = calculateFinalDamage(dmg.amount, dmgType, target);
-
-                const newHp = Math.max(0, target.stats.hp - finalDamage);
-                const newEntities = get().battleEntities.map(e => e.id === target.id ? { ...e, stats: { ...e.stats, hp: newHp } } : e);
-                const popups = [...get().damagePopups, { id: generateId(), position: [target.position.x, 0, target.position.y], amount: finalDamage, color: '#ef4444', isCrit: false, timestamp: Date.now() }];
-
-                set({ battleEntities: newEntities, damagePopups: popups, isActionAnimating: false });
-                get().addLog(`${activeEntity.name} attacks ${target.name} from range!`, "combat");
-                enemyHasActed = true;
-            }
-            else if (behavior === AIBehavior.DEFENSIVE && distToTarget < 2) {
-                // Too close! Flee logic: Pick a tile away from target
-                // Simple implementation: Just don't advance, maybe wait
-                enemyHasActed = true; // Skip turn effectively or implement flee move
-            }
-        }
-
-        // --- BASIC MELEE / FALLBACK ---
-        if (!enemyHasActed) {
-            if (distToTarget <= 1.5) {
-                // Melee Attack
-                set({ isActionAnimating: true });
-                sfx.playAttack();
-                await new Promise(r => setTimeout(r, 400));
-
-                const roll = calculateAttackRoll(activeEntity);
-                if (roll.total >= target.stats.ac) {
-                    sfx.playHit();
-                    const dmg = calculateDamage(activeEntity, EquipmentSlot.MAIN_HAND, roll.isCrit);
-                    const { finalDamage, isImmune, isResistant, isVulnerable } = calculateFinalDamage(dmg.amount, dmg.type, target);
-
-                    const newHp = Math.max(0, target.stats.hp - finalDamage);
-                    const newEntities = get().battleEntities.map(e => e.id === target.id ? { ...e, stats: { ...e.stats, hp: newHp } } : e);
-
-                    let color = '#ef4444';
-                    if (isImmune) color = '#94a3b8';
-                    else if (isResistant) color = '#d97706';
-
-                    const popups = [...get().damagePopups, { id: generateId(), position: [target.position.x, 0, target.position.y], amount: isImmune ? 'IMMUNE' : finalDamage, color, isCrit: roll.isCrit, timestamp: Date.now() }];
-                    set({ battleEntities: newEntities, damagePopups: popups });
-                    get().addLog(`${activeEntity.name} attacks ${target.name} for ${finalDamage}!`, "combat");
-                } else {
-                    const popups = [...get().damagePopups, { id: generateId(), position: [target.position.x, 0, target.position.y], amount: 'MISS', color: '#94a3b8', isCrit: false, timestamp: Date.now() }];
-                    set({ damagePopups: popups });
-                    get().addLog(`${activeEntity.name} misses.`, "combat");
-                }
-                set({ isActionAnimating: false });
-            } else {
-                // Move towards
-                // CHECK ROOT
-                if (activeEntity.stats.statusEffects && activeEntity.stats.statusEffects['ROOTED']) {
-                    get().addLog(`${activeEntity.name} is rooted!`, "combat");
-                } else {
-                    const path = findBattlePath(activeEntity.position, target.position, battleMap);
-                    if (path && path.length > 1) {
-                        const speed = 4;
-                        const moveNode = path[Math.min(path.length - 2, speed)];
-                        const isOccupied = battleEntities.some(e => e.position.x === moveNode.x && e.position.y === moveNode.z && e.stats.hp > 0);
-                        if (!isOccupied) {
-                            const newEntities = battleEntities.map(e => e.id === activeEntity.id ? { ...e, position: { x: moveNode.x, y: moveNode.z } } : e);
-                            set({ battleEntities: newEntities });
-                            sfx.playStep();
-                        }
-                    }
-                }
-            }
-        }
-
-        get().checkBattleEnd();
-
-        // Safety: Ensure we don't dispatch state updates if the battle ended in the previous step
-        if (get().gameState === GameState.BATTLE_TACTICAL) {
-            get().nextTurn();
-        }
-    },
-
-    nextTurn: async () => {
-        const state = get();
-        let nextIndex = (state.currentTurnIndex + 1) % state.turnOrder.length;
-        let loopCount = 0;
-        let found = false;
-        let nextId = "";
-
-        // Find next valid living entity
-        while (loopCount < state.turnOrder.length) {
-            nextId = state.turnOrder[nextIndex];
-            const ent = state.battleEntities.find(e => e.id === nextId);
-            if (ent && ent.stats.hp > 0) {
-                found = true;
-                break;
-            }
-            nextIndex = (nextIndex + 1) % state.turnOrder.length;
-            loopCount++;
-        }
-
-        if (!found) return;
-
-        // Force Reset Action State
-        set({
-            currentTurnIndex: nextIndex,
-            hasMoved: false,
-            hasActed: false,
-            selectedAction: null,
-            selectedTile: null,
-            selectedSpell: null,
-            selectedSkill: null,
-            isSkillSelectionMode: false,
-            isActionAnimating: false
-        });
-
-        // START OF TURN PROCESSING (DoTs, Cooldowns, Stuns)
-        const canAct = await get().processStartOfTurn(nextId);
-
-        if (!canAct) {
-            // If stunned, recurse nextTurn but break stack with timeout to prevent infinite loop
-            setTimeout(() => get().nextTurn(), 100);
-            return;
-        }
-
-        // If Enemy, trigger AI
-        // Wait a microtask to ensure state is committed
-        setTimeout(() => {
-            const freshEnt = get().battleEntities.find((e: any) => e.id === nextId);
-            if (freshEnt && freshEnt.type === 'ENEMY') {
-                get().performEnemyTurn();
-            }
-        }, 50);
-    },
-
-    processStartOfTurn: async (entityId: string) => {
-        const state = get();
-        const entity = state.battleEntities.find(e => e.id === entityId);
-        if (!entity) return false;
-
-        let newStats = { ...entity.stats };
-        let updated = false;
-        const popups: DamagePopup[] = [];
-
-        // 1. Cooldowns
-        if (newStats.activeCooldowns) {
-            const nextCD: Record<string, number> = {};
-            Object.entries(newStats.activeCooldowns).forEach(([key, val]) => {
-                const v = val as number;
-                if (v > 1) nextCD[key] = v - 1;
-            });
-            newStats.activeCooldowns = nextCD;
-            updated = true;
-        }
-
-        // 2. Status Effects (Duration)
-        let stunned = false;
-        if (newStats.statusEffects) {
-            const nextEffects: Record<string, number> = {};
-
-            for (const [effect, durationVal] of Object.entries(newStats.statusEffects)) {
-                const duration = durationVal as number;
-
-                // Apply DoTs
-                if (effect === 'POISON' || effect === 'BLEED') {
-                    const dmg = 3;
-                    newStats.hp = Math.max(0, newStats.hp - dmg);
-                    popups.push({ id: generateId(), position: [entity.position.x, 0, entity.position.y], amount: dmg, color: '#10b981', isCrit: false, timestamp: Date.now() });
-                    get().addLog(`${entity.name} takes ${dmg} ${effect.toLowerCase()} damage.`, "combat");
-                    updated = true;
-                }
-
-                // Check CC
-                if (effect === 'STUN' || effect === 'FREEZE') {
-                    stunned = true;
-                    popups.push({ id: generateId(), position: [entity.position.x, 0, entity.position.y], amount: 'STUNNED', color: '#fbbf24', isCrit: false, timestamp: Date.now() });
-                    get().addLog(`${entity.name} is stunned!`, "combat");
-                }
-
-                if (duration > 1) nextEffects[effect] = duration - 1;
-                else get().addLog(`${entity.name}'s ${effect} wore off.`, "info");
-            }
-            newStats.statusEffects = nextEffects;
-            updated = true;
-        }
-
-        if (updated) {
-            const newEntities = state.battleEntities.map(e => e.id === entityId ? { ...e, stats: newStats } : e);
-            set({ battleEntities: newEntities, damagePopups: [...state.damagePopups, ...popups] });
-
-            if (newStats.hp <= 0) {
-                get().checkBattleEnd();
-                return false;
-            }
-        }
-
-        if (stunned) {
-            await new Promise(r => setTimeout(r, 1000)); // Pause to show stun
-            return false; // Skip turn
-        }
-
-        return true; // Can act
-    },
-
-    checkBattleEnd: () => {
-        const { battleEntities, party } = get();
-        const playersAlive = battleEntities.filter(e => e.type === 'PLAYER' && e.stats.hp > 0);
-        const enemiesAlive = battleEntities.filter(e => e.type === 'ENEMY' && e.stats.hp > 0);
-
-        if (playersAlive.length === 0) {
-            set({ gameState: GameState.BATTLE_DEFEAT });
-            sfx.playHit();
-        } else if (enemiesAlive.length === 0) {
-            let totalXp = 0;
-            let totalGold = 0;
-            let items: any[] = [];
-
-            const contentStore = useContentStore.getState();
-            const enemyDefs = contentStore.enemies;
-            const allItems = contentStore.items;
-
-            battleEntities.forEach(e => {
-                if (e.type === 'ENEMY') {
-                    const defId = e.defId;
-                    const def = defId ? enemyDefs[defId] : null;
-
-                    if (def) {
-                        totalXp += def.xpReward || 10;
-                        totalGold += Math.floor(Math.random() * 5) + 1;
-                        if (def.lootTable) {
-                            def.lootTable.forEach(entry => {
-                                if (Math.random() < entry.chance) {
-                                    const itemDef = allItems[entry.itemId];
-                                    if (itemDef) items.push(itemDef);
-                                }
-                            });
-                        }
-                    } else {
-                        totalXp += 20; totalGold += 5;
-                    }
-                }
-            });
-
-            const updatedParty = party.map(p => {
-                const battleVersion = battleEntities.find(b => b.id === p.id);
-                if (battleVersion) return { ...p, stats: battleVersion.stats };
-                return p;
-            });
-
-            set({
-                gameState: GameState.BATTLE_VICTORY,
-                battleRewards: { xp: totalXp, gold: totalGold, items },
-                party: updatedParty
-            });
-            sfx.playVictory();
-        }
-    },
-
-    continueAfterVictory: () => {
-        const { battleRewards, party } = get();
-        const { addGold, addItem } = get();
-        addGold(battleRewards.gold);
-        battleRewards.items.forEach(i => addItem(i));
-
-        const xpPerMember = Math.floor(battleRewards.xp / party.length);
-
-        const newParty = party.map(p => {
-            const newXp = p.stats.xp + xpPerMember;
-            return { ...p, stats: { ...p.stats, xp: newXp } };
-        });
-
-        set({ party: newParty });
-
-        const anyoneLeveling = newParty.some(p => p.stats.xp >= p.stats.xpToNextLevel);
-
-        if (anyoneLeveling) {
-            set({ gameState: GameState.LEVEL_UP });
-            sfx.playVictory();
-        } else {
-            set({ gameState: GameState.OVERWORLD });
-        }
-    },
-
-    restartBattle: () => { get().loadGame(); },
-
-    collectLoot: (dropId) => {
-        const { lootDrops, addItem } = get();
-        const dropIndex = lootDrops.findIndex(d => d.id === dropId);
-        if (dropIndex !== -1) {
-            const drop = lootDrops[dropIndex];
-            drop.items.forEach(i => addItem(i));
-            get().addGold(drop.gold);
-            const newDrops = [...lootDrops];
-            newDrops.splice(dropIndex, 1);
-            set({ lootDrops: newDrops });
-            sfx.playUiClick();
-            get().addLog("Loot collected!", "info");
-        }
-    },
-
-    attemptRun: () => {
-        if (Math.random() > 0.4) {
-            get().addLog("Escaped successfully!", "narrative");
-            set({ gameState: GameState.OVERWORLD });
-        } else {
-            get().addLog("Failed to run!", "combat");
-            set({ hasActed: true, hasMoved: true });
-        }
-    },
-
-    hasLineOfSight: (source, target) => { return checkLineOfSight(source, target, get().battleMap); },
-    getAttackPrediction: () => null,
-    removeDamagePopup: (id) => { set(state => ({ damagePopups: state.damagePopups.filter(p => p.id !== id) })); }
+  battleEntities: [],
+  turnOrder: [],
+  currentTurnIndex: 0,
+  battleMap: null,
+  battleTerrain: TerrainType.GRASS,
+  battleWeather: WeatherType.NONE,
+  battleRewards: { xp: 0, gold: 0, items: [] },
+  selectedTile: null,
+  hoveredEntity: null,
+  selectedAction: null,
+  selectedSpell: null,
+  selectedSkill: null,
+  hasMoved: false,
+  hasActed: false,
+  damagePopups: [],
+  activeSpellEffect: null,
+  lootDrops: [],
+  isActionAnimating: false,
+  inspectedEntityId: null,
+
+  inspectUnit: (id) => set({ inspectedEntityId: id }),
+  closeInspection: () => set({ inspectedEntityId: null }),
+
+  handleTileHover: (x, z) => {
+      const ent = get().battleEntities.find((e: Entity) => e.position.x === x && e.position.y === z);
+      set({ selectedTile: { x, z }, hoveredEntity: ent || null });
+  },
+
+  hasLineOfSight: (targetId) => {
+      const activeId = get().turnOrder[get().currentTurnIndex];
+      const active = get().battleEntities.find((e: Entity) => e.id === activeId);
+      const target = get().battleEntities.find((e: Entity) => e.id === targetId);
+      if (!active || !target) return false;
+      return checkLineOfSight(active.position, target.position, get().battleMap || []);
+  },
+
+  startBattle: (terrain, weather, enemyId) => {
+      const state = get();
+      const party = state.party;
+      const contentState = useContentStore.getState();
+      
+      const grid = generateBattleGrid(terrain);
+      
+      const entities: Entity[] = party.map((p: any, i: number) => ({
+          ...p,
+          position: { x: 5 + (i % 2), y: 5 + Math.floor(i / 2) } 
+      }));
+
+      const encounterList = contentState.encounters[terrain] || [];
+      const enemyIds = encounterList.length > 0 ? encounterList : ['goblin_spearman'];
+      
+      let finalEnemyList = [...enemyIds];
+      if (enemyId) {
+          const bossDef = state.activeOverworldEnemies.find((e: any) => e.id === enemyId);
+          if (bossDef && bossDef.defId === 'lich_lord') {
+              finalEnemyList = ['lich_lord', 'skeleton_archer', 'skeleton_archer'];
+          }
+      }
+
+      const numEnemies = Math.floor(Math.random() * 2) + 2 + Math.floor(state.party[0].stats.level / 3); 
+      
+      for(let i = 0; i < numEnemies; i++) {
+          const enemyDefId = finalEnemyList[Math.floor(Math.random() * finalEnemyList.length)];
+          const def = contentState.enemies[enemyDefId];
+          if (!def) continue;
+
+          const stats = calculateEnemyStats(def, state.party[0].stats.level, state.difficulty);
+          const x = BATTLE_MAP_SIZE - 4 + (i % 2);
+          const y = BATTLE_MAP_SIZE - 4 - Math.floor(i / 2);
+          
+          let ai = AIBehavior.BASIC_MELEE;
+          if (def.id.includes('archer')) ai = AIBehavior.DEFENSIVE;
+          if (def.id.includes('sorcerer') || def.id.includes('lich')) ai = AIBehavior.SPELLCASTER;
+          if (def.id.includes('shaman')) ai = AIBehavior.HEALER;
+
+          entities.push({
+              id: `enemy_${generateId()}`,
+              name: def.name,
+              defId: def.id,
+              type: 'ENEMY',
+              position: { x, y },
+              stats,
+              visual: { color: '#ef4444', modelType: 'billboard', spriteUrl: def.sprite },
+              equipment: {},
+              aiBehavior: ai
+          });
+      }
+
+      get().initializeBattle(entities, terrain, weather);
+      sfx.playUiClick();
+  },
+
+  initializeBattle: (entities, terrain, weather) => {
+      const initiatives = entities.map(e => ({
+          id: e.id,
+          roll: rollD20().result + (e.stats.initiativeBonus || 0)
+      })).sort((a, b) => b.roll - a.roll);
+
+      set({
+          gameState: GameState.BATTLE_TACTICAL,
+          battleEntities: entities,
+          turnOrder: initiatives.map(i => i.id),
+          currentTurnIndex: 0,
+          battleMap: generateBattleGrid(terrain),
+          battleTerrain: terrain,
+          battleWeather: weather,
+          selectedAction: null,
+          hasMoved: false,
+          hasActed: false,
+          damagePopups: [],
+          lootDrops: []
+      });
+      
+      const firstId = initiatives[0].id;
+      if (entities.find(e => e.id === firstId)?.type === 'ENEMY') {
+          setTimeout(() => get().performEnemyTurn(), 1000);
+      }
+  },
+
+  selectAction: (action) => set({ selectedAction: action, selectedSpell: null, selectedSkill: null }),
+  selectSpell: (spellId) => {
+      const content = useContentStore.getState();
+      const spell = content.spells[spellId] || SPELLS[spellId];
+      set({ selectedSpell: spell, selectedAction: BattleAction.MAGIC }); 
+  },
+  selectSkill: (skillId) => {
+      const content = useContentStore.getState();
+      const skill = content.skills[skillId] || SKILLS[skillId]; 
+      set({ selectedSkill: skill, selectedAction: BattleAction.SKILL });
+  },
+
+  handleTileInteraction: async (x, z) => {
+      const state = get();
+      if (state.isActionAnimating) return;
+
+      const activeId = state.turnOrder[state.currentTurnIndex];
+      const entity = state.battleEntities.find(e => e.id === activeId);
+      
+      if (!entity || entity.type !== 'PLAYER') return;
+
+      const targetEntity = state.battleEntities.find(e => e.position.x === x && e.position.y === z && e.stats.hp > 0);
+
+      // MOVE
+      if (state.selectedAction === BattleAction.MOVE && !state.hasMoved && !targetEntity) {
+          const path = findBattlePath(entity.position, {x, y: z}, state.battleMap || []);
+          if (path) {
+              await get().moveEntity(path.map(p => ({ x: p.x, z: p.z })));
+          }
+      }
+      // ATTACK
+      else if (state.selectedAction === BattleAction.ATTACK && !state.hasActed && targetEntity) {
+          const dist = Math.max(Math.abs(entity.position.x - targetEntity.position.x), Math.abs(entity.position.y - targetEntity.position.y));
+          if (dist <= getAttackRange(entity)) {
+              await get().performAttack(targetEntity.id);
+          } else {
+              get().addLog("Target out of range.", "info");
+          }
+      }
+      // MAGIC
+      else if (state.selectedAction === BattleAction.MAGIC && !state.hasActed && state.selectedSpell) {
+          const dist = Math.max(Math.abs(entity.position.x - x), Math.abs(entity.position.y - z));
+          if (dist <= state.selectedSpell.range) {
+              await get().performMagic({ x, y: z }); 
+          }
+      }
+      // SKILL
+      else if (state.selectedAction === BattleAction.SKILL && !state.hasActed && state.selectedSkill) {
+          const dist = Math.max(Math.abs(entity.position.x - x), Math.abs(entity.position.y - z));
+          if (dist <= state.selectedSkill.range) {
+              await get().performSkill({ x, y: z });
+          }
+      }
+  },
+
+  moveEntity: async (path) => {
+      set({ isActionAnimating: true });
+      const activeId = get().turnOrder[get().currentTurnIndex];
+      
+      for (const node of path) {
+          set(state => ({
+              battleEntities: state.battleEntities.map(e => 
+                  e.id === activeId ? { ...e, position: { x: node.x, y: node.z || node.y } } : e
+              )
+          }));
+          sfx.playStep();
+          await new Promise(r => setTimeout(r, 200));
+      }
+      
+      set({ hasMoved: true, isActionAnimating: false, selectedAction: null });
+  },
+
+  performAttack: async (targetId) => {
+      set({ isActionAnimating: true });
+      const state = get();
+      const attacker = state.battleEntities.find(e => e.id === state.turnOrder[state.currentTurnIndex]);
+      const target = state.battleEntities.find(e => e.id === targetId);
+      
+      if (!attacker || !target) return;
+
+      sfx.playAttack();
+      await new Promise(r => setTimeout(r, 500)); 
+
+      const { total, isCrit, isAutoMiss } = calculateAttackRoll(attacker);
+      const ac = calculateAC(target.stats.attributes.DEX, target.stats.ac, false); 
+      
+      const hits = !isAutoMiss && (isCrit || total >= ac);
+      
+      if (hits) {
+          const { amount, type, isMagical } = calculateDamage(attacker, EquipmentSlot.MAIN_HAND, isCrit);
+          const { finalDamage, isResistant, isVulnerable } = calculateFinalDamage(amount, type, target, isMagical);
+          
+          const newTarget = applyDamageToEntity(target, finalDamage, state.damagePopups);
+          
+          const popups = [...state.damagePopups, { 
+              id: generateId(), 
+              position: [target.position.x, 0, target.position.y], 
+              amount: finalDamage, 
+              color: isCrit ? '#fbbf24' : (isVulnerable ? '#ef4444' : (isResistant ? '#9ca3af' : 'white')), 
+              isCrit, 
+              timestamp: Date.now() 
+          }];
+
+          set(s => ({
+              battleEntities: s.battleEntities.map(e => e.id === targetId ? newTarget : e),
+              damagePopups: popups
+          }));
+          
+          sfx.playHit();
+          get().addLog(`${attacker.name} hits ${target.name} for ${finalDamage} damage!`, "combat");
+
+          if (newTarget.stats.hp <= 0) {
+              sfx.playVictory(); 
+              if (target.type === 'ENEMY') {
+                  if (Math.random() > 0.5) {
+                      set(s => ({
+                          lootDrops: [...s.lootDrops, { id: generateId(), position: target.position, items: [], gold: rollDice(10, 2), rarity: ItemRarity.COMMON }]
+                      }));
+                  }
+              }
+          }
+
+      } else {
+          const popups = [...state.damagePopups, { 
+              id: generateId(), 
+              position: [target.position.x, 0, target.position.y], 
+              amount: "MISS", 
+              color: '#94a3b8', 
+              isCrit: false, 
+              timestamp: Date.now() 
+          }];
+          set({ damagePopups: popups });
+          get().addLog(`${attacker.name} missed ${target.name}.`, "info");
+      }
+
+      set({ hasActed: true, isActionAnimating: false, selectedAction: null });
+  },
+
+  performMagic: async (targetPos) => {
+      const state = get();
+      const caster = state.battleEntities.find(e => e.id === state.turnOrder[state.currentTurnIndex]);
+      const spell = state.selectedSpell;
+      
+      if (!caster || !spell) return;
+      if (caster.stats.spellSlots.current <= 0) {
+          get().addLog("Not enough Mana!", "info");
+          return;
+      }
+
+      set({ isActionAnimating: true });
+      
+      // Mana Cost
+      const newCaster = { ...caster, stats: { ...caster.stats, spellSlots: { ...caster.stats.spellSlots, current: caster.stats.spellSlots.current - 1 } } };
+      set(s => ({ battleEntities: s.battleEntities.map(e => e.id === caster.id ? newCaster : e) }));
+
+      // VFX
+      const effectData: SpellEffectData = {
+          id: generateId(),
+          type: spell.name === 'Fireball' ? 'BURST' : 'PROJECTILE',
+          startPos: [caster.position.x, 1, caster.position.y],
+          endPos: [targetPos.x, 0.5, targetPos.y],
+          color: spell.damageType === DamageType.FIRE ? '#ef4444' : '#a855f7',
+          duration: 800,
+          timestamp: Date.now(),
+          projectileSprite: spell.icon, 
+          textureUrl: spell.animation 
+      };
+      set({ activeSpellEffect: effectData });
+      sfx.playMagic();
+      
+      await new Promise(r => setTimeout(r, 800));
+
+      // Determine Targets (AoE vs Single)
+      let affectedEntities: Entity[] = [];
+      if (spell.aoeRadius) {
+          const tiles = getAoETiles(caster.position, targetPos, spell.aoeType || 'CIRCLE', spell.aoeRadius);
+          affectedEntities = state.battleEntities.filter(e => 
+              e.stats.hp > 0 && tiles.some(t => t.x === e.position.x && t.y === e.position.y)
+          );
+      } else {
+          const target = state.battleEntities.find(e => e.position.x === targetPos.x && e.position.y === targetPos.y && e.stats.hp > 0);
+          if (target) affectedEntities.push(target);
+      }
+
+      // EXECUTE STRATEGIES
+      const strategyKey = spell.type === SpellType.HEAL ? 'HEAL' : 'DAMAGE'; // Map spell type to strategy
+      const strategy = EffectStrategies[strategyKey] || EffectStrategies['DAMAGE'];
+
+      const updates = affectedEntities.map(target => {
+          return strategy({
+              caster,
+              target,
+              source: spell,
+              popupList: []
+          });
+      });
+
+      // Batch Update
+      set(s => {
+          let newEntities = [...s.battleEntities];
+          let newPopups = [...s.damagePopups];
+          updates.forEach(u => {
+              newEntities = newEntities.map(e => e.id === u.newEntity.id ? u.newEntity : e);
+              newPopups.push({ ...u.popup, id: generateId(), position: [u.newEntity.position.x, 0, u.newEntity.position.y], timestamp: Date.now() } as any);
+          });
+          return { battleEntities: newEntities, damagePopups: newPopups, activeSpellEffect: null };
+      });
+
+      get().addLog(`${caster.name} casts ${spell.name}!`, "combat");
+      set({ hasActed: true, isActionAnimating: false, selectedAction: null });
+  },
+
+  performSkill: async (targetPos) => {
+      const state = get();
+      const user = state.battleEntities.find(e => e.id === state.turnOrder[state.currentTurnIndex]);
+      const skill = state.selectedSkill;
+      
+      if (!user || !skill) return;
+      
+      // Cost Check
+      if (user.stats.stamina < skill.staminaCost) {
+          get().addLog("Not enough Stamina!", "info");
+          return;
+      }
+
+      set({ isActionAnimating: true });
+
+      // Apply Cost
+      const newUser = { ...user, stats: { ...user.stats, stamina: user.stats.stamina - skill.staminaCost } };
+      set(s => ({ battleEntities: s.battleEntities.map(e => e.id === user.id ? newUser : e) }));
+
+      sfx.playAttack();
+      await new Promise(r => setTimeout(r, 500));
+
+      // Find Target
+      let affectedEntities: Entity[] = [];
+      if (skill.effect === 'HEAL_SELF') {
+          affectedEntities = [user]; // Special case for self-target skills
+      } else {
+          const target = state.battleEntities.find(e => e.position.x === targetPos.x && e.position.y === targetPos.y && e.stats.hp > 0);
+          if (target) affectedEntities.push(target);
+      }
+
+      // EXECUTE STRATEGY
+      const strategyKey = skill.effect || 'DAMAGE';
+      const strategy = EffectStrategies[strategyKey] || EffectStrategies['DAMAGE'];
+
+      const updates = affectedEntities.map(target => {
+          return strategy({
+              caster: user,
+              target,
+              source: skill,
+              popupList: []
+          });
+      });
+
+      set(s => {
+          let newEntities = [...s.battleEntities];
+          let newPopups = [...s.damagePopups];
+          updates.forEach(u => {
+              newEntities = newEntities.map(e => e.id === u.newEntity.id ? u.newEntity : e);
+              newPopups.push({ ...u.popup, id: generateId(), position: [u.newEntity.position.x, 0, u.newEntity.position.y], timestamp: Date.now() } as any);
+          });
+          return { battleEntities: newEntities, damagePopups: newPopups };
+      });
+
+      get().addLog(`${user.name} uses ${skill.name}!`, "combat");
+      set({ hasActed: true, isActionAnimating: false, selectedAction: null });
+  },
+
+  performEnemyTurn: async () => {
+      const state = get();
+      const activeId = state.turnOrder[state.currentTurnIndex];
+      const entity = state.battleEntities.find(e => e.id === activeId);
+      
+      if (!entity || entity.type !== 'ENEMY' || entity.stats.hp <= 0) {
+          get().nextTurn();
+          return;
+      }
+
+      set({ isActionAnimating: true });
+      await new Promise(r => setTimeout(r, 500)); // Think time
+
+      // CONTEXT FOR STRATEGY
+      const context: AIContext = {
+          entity,
+          allEntities: state.battleEntities,
+          map: state.battleMap || [],
+          actions: {
+              move: (path) => get().moveEntity(path.map(p => ({ x: p.x, z: p.z || p.y }))), // Adapter for path struct
+              attack: (targetId) => get().performAttack(targetId),
+              cast: (spellId, pos) => {
+                  const content = useContentStore.getState();
+                  const spell = content.spells[spellId] || SPELLS[spellId];
+                  set({ selectedSpell: spell }); // Set context for performMagic
+                  return get().performMagic(pos);
+              },
+              pass: () => {} // Do nothing
+          },
+          log: get().addLog
+      };
+
+      // SELECT STRATEGY
+      const behavior = entity.aiBehavior || AIBehavior.BASIC_MELEE;
+      const strategy = AIStrategies[behavior] || AIStrategies[AIBehavior.BASIC_MELEE];
+
+      // EXECUTE
+      try {
+          await strategy(context);
+      } catch (e) {
+          console.error("AI Error", e);
+      }
+
+      set({ isActionAnimating: false });
+      get().endTurn();
+  },
+
+  endTurn: () => {
+      const state = get();
+      // Tick Cooldowns & Effects
+      const activeId = state.turnOrder[state.currentTurnIndex];
+      // ... logic to decrement cooldowns ...
+
+      get().nextTurn();
+  },
+
+  nextTurn: () => {
+      const state = get();
+      
+      // Check Victory/Defeat
+      const playersAlive = state.battleEntities.some(e => e.type === 'PLAYER' && e.stats.hp > 0);
+      const enemiesAlive = state.battleEntities.some(e => e.type === 'ENEMY' && e.stats.hp > 0);
+      
+      if (!playersAlive) {
+          set({ gameState: GameState.BATTLE_DEFEAT });
+          return;
+      }
+      if (!enemiesAlive) {
+          // Calc Rewards
+          let totalXp = 0;
+          let totalGold = 0;
+          state.battleEntities.forEach(e => {
+              if (e.type === 'ENEMY') {
+                  totalXp += e.stats.xpReward || 0; // Stored in XP field or separate
+                  totalGold += 10;
+              }
+          });
+          set({ gameState: GameState.BATTLE_VICTORY, battleRewards: { xp: totalXp, gold: totalGold, items: [] } });
+          sfx.playVictory();
+          return;
+      }
+
+      let nextIndex = (state.currentTurnIndex + 1) % state.turnOrder.length;
+      let nextId = state.turnOrder[nextIndex];
+      let nextEntity = state.battleEntities.find(e => e.id === nextId);
+
+      // Skip dead entities
+      while (nextEntity?.stats.hp! <= 0) {
+          nextIndex = (nextIndex + 1) % state.turnOrder.length;
+          nextId = state.turnOrder[nextIndex];
+          nextEntity = state.battleEntities.find(e => e.id === nextId);
+      }
+
+      set({ 
+          currentTurnIndex: nextIndex, 
+          hasMoved: false, 
+          hasActed: false, 
+          selectedAction: null,
+          selectedTile: null 
+      });
+
+      if (nextEntity?.type === 'ENEMY') {
+          setTimeout(() => get().performEnemyTurn(), 500);
+      } else {
+          get().addLog(`It is ${nextEntity?.name}'s turn.`, "info");
+      }
+  },
+
+  attemptRun: () => {
+      if (Math.random() > 0.4) {
+          get().addLog("Escaped successfully!", "narrative");
+          set({ gameState: GameState.OVERWORLD });
+      } else {
+          get().addLog("Failed to escape!", "combat");
+          get().endTurn();
+      }
+  },
+
+  continueAfterVictory: () => {
+      const { battleRewards, party, addGold, clearedEncounters, playerPos, dimension, activeOverworldEnemies } = get();
+      // Apply Rewards
+      addGold(battleRewards.gold);
+      const xpPerPerson = Math.floor(battleRewards.xp / party.length);
+      
+      const newParty = party.map((p: any) => {
+          const newXp = p.stats.xp + xpPerPerson;
+          return { ...p, stats: { ...p.stats, xp: newXp } };
+      });
+      
+      // Update Overworld State
+      const newCleared = new Set(clearedEncounters);
+      newCleared.add(`${playerPos.x},${playerPos.y}`); // Mark tile as cleared if fixed encounter
+
+      // Remove killed overworld entities
+      const aliveOverworldEnemies = activeOverworldEnemies.filter((e: any) => {
+          // If this battle was triggered by an overworld entity, remove it.
+          // Simplified: Remove entity at player pos
+          return !(e.q === playerPos.x && e.r === playerPos.y && e.dimension === dimension);
+      });
+
+      // Special Boss Logic
+      const bossDefeated = !aliveOverworldEnemies.find((e: any) => e.defId === 'lich_lord');
+      if (bossDefeated && dimension === Dimension.UPSIDE_DOWN && playerPos.x === 0 && playerPos.y === 0) {
+           set({ gameState: GameState.GAME_WON });
+           return;
+      }
+
+      set({ 
+          party: newParty, 
+          gameState: GameState.OVERWORLD,
+          clearedEncounters: newCleared,
+          activeOverworldEnemies: aliveOverworldEnemies
+      });
+  },
+
+  restartBattle: () => {
+      // Reload logic handled by save system mostly, but here we can just reset
+      const { loadGame } = get();
+      loadGame(0); // Quick load slot 0
+  },
+
+  removeDamagePopup: (id) => set(s => ({ damagePopups: s.damagePopups.filter(p => p.id !== id) }))
 });

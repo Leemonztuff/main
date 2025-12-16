@@ -23,9 +23,97 @@ export interface InventorySlice {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+// --- ITEM STRATEGY PATTERN ---
+
+interface ItemEffectContext {
+    item: Item;
+    stats: CombatStatsComponent;
+    log: (msg: string, type: any) => void;
+}
+
+interface ItemEffectResult {
+    success: boolean;
+    message: string;
+    newStats: CombatStatsComponent;
+    shouldConsume: boolean;
+    popupColor?: string;
+}
+
+const ItemStrategies: Record<string, (ctx: ItemEffectContext) => ItemEffectResult> = {
+    'heal_hp': ({ item, stats }) => {
+        // Rule: Undead/Constructs usually immune to healing potions
+        if (stats.creatureType === CreatureType.UNDEAD || stats.creatureType === CreatureType.CONSTRUCT) {
+            return { success: false, message: "Immune", newStats: stats, shouldConsume: false, popupColor: '#94a3b8' };
+        }
+        const amount = item.id.includes('potion') ? rollDice(4, 2) + 2 : (item.effect?.amount || 0);
+        const newHp = Math.min(stats.maxHp, stats.hp + amount);
+        return {
+            success: true,
+            message: `+${amount} HP`,
+            newStats: { ...stats, hp: newHp },
+            shouldConsume: true,
+            popupColor: '#22c55e'
+        };
+    },
+    'restore_mana': ({ item, stats }) => {
+        const amount = item.effect?.amount || 1;
+        const newCurrent = Math.min(stats.spellSlots.max, stats.spellSlots.current + amount);
+        return {
+            success: true,
+            message: `+${amount} Mana`,
+            newStats: { ...stats, spellSlots: { ...stats.spellSlots, current: newCurrent } },
+            shouldConsume: true,
+            popupColor: '#3b82f6'
+        };
+    },
+    'buff_str': ({ item, stats }) => {
+        const amount = item.effect?.amount || 1;
+        return {
+            success: true,
+            message: `Strength Up`,
+            newStats: { 
+                ...stats, 
+                attributes: { ...stats.attributes, STR: stats.attributes.STR + amount },
+                baseAttributes: { ...stats.baseAttributes, STR: stats.baseAttributes.STR + amount }
+            },
+            shouldConsume: true,
+            popupColor: '#f59e0b'
+        };
+    },
+    // Special Strategy for Sacred Elixir
+    'sacred_cleanse': ({ stats, log }) => {
+        if (stats.creatureType === CreatureType.UNDEAD) {
+            const amount = 20;
+            const newHp = Math.max(0, stats.hp - amount);
+            return {
+                success: true,
+                message: `${amount} RADIANT`,
+                newStats: { ...stats, hp: newHp },
+                shouldConsume: true,
+                popupColor: '#fbbf24'
+            };
+        } else {
+            log("The sacred light purges the shadow.", "narrative");
+            return {
+                success: true,
+                message: "Cleansed",
+                newStats: { ...stats, hp: stats.maxHp, corruption: 0 },
+                shouldConsume: true,
+                popupColor: '#ffffff'
+            };
+        }
+    }
+};
+
+const resolveStrategy = (item: Item) => {
+    if (item.id === 'sacred_elixir') return ItemStrategies['sacred_cleanse'];
+    if (item.effect?.type && ItemStrategies[item.effect.type]) return ItemStrategies[item.effect.type];
+    return null;
+};
+
 export const createInventorySlice: StateCreator<any, [], [], InventorySlice> = (set, get) => ({
   inventory: [],
-  gold: 250, // Updated starting gold for better testing experience
+  gold: 250, 
   isInventoryOpen: false,
   activeInventoryCharacterId: null,
 
@@ -95,11 +183,11 @@ export const createInventorySlice: StateCreator<any, [], [], InventorySlice> = (
     const state = get();
     const slotIndex = state.inventory.findIndex(s => s.item.id === itemId);
     if (slotIndex === -1) return;
-    sfx.playMagic(); 
+    
     const item = state.inventory[slotIndex].item;
     let targetId = characterId || state.activeInventoryCharacterId || state.party[0].id;
     
-    // If in battle, allow targeting current turn entity if player
+    // Auto-target in battle context
     if (state.gameState === GameState.BATTLE_TACTICAL) {
          const turnId = state.turnOrder[state.currentTurnIndex];
          const turnEntity = state.battleEntities.find(e => e.id === turnId);
@@ -108,93 +196,93 @@ export const createInventorySlice: StateCreator<any, [], [], InventorySlice> = (
          }
     }
 
-    const applyEffect = (entity: any) => {
-        const stats = { ...entity.stats };
-        let amount = 0;
-        let message = '';
-        let isSuccess = true;
-        
-        if (item.effect?.type === 'heal_hp') { 
-            // D&D Rule: Constructs and Undead cannot be healed by standard potions
-            if (stats.creatureType === CreatureType.UNDEAD || stats.creatureType === CreatureType.CONSTRUCT) {
-                message = "Immune to Healing";
-                isSuccess = false;
-            } else {
-                amount = item.id.includes('potion') ? rollDice(4, 2) + 2 : item.effect.amount; 
-                stats.hp = Math.min(stats.maxHp, stats.hp + amount); 
-                message = `+${amount} HP`;
-            }
-        } 
-        else if (item.effect?.type === 'restore_mana') { 
-            amount = item.effect.amount; 
-            stats.spellSlots.current = Math.min(stats.spellSlots.max, stats.spellSlots.current + amount); 
-            message = `+${amount} Mana`;
-        }
-        else if (item.id === 'sacred_elixir') {
-            // Sacred Elixir: Fully heals living, cleanses corruption. Damages Undead.
-            if (stats.creatureType === CreatureType.UNDEAD) {
-                amount = 20; // Massive Radiant Damage
-                stats.hp = Math.max(0, stats.hp - amount);
-                message = `${amount} RADIANT DMG`;
-            } else {
-                amount = 50;
-                const oldCorr = stats.corruption || 0;
-                stats.corruption = Math.max(0, oldCorr - amount);
-                stats.hp = stats.maxHp;
-                message = "Restored & Cleansed";
-                get().addLog("The sacred light purges the shadow.", "narrative");
-            }
-        }
-        else if (item.effect?.type === 'buff_str') { 
-            amount = item.effect.amount; 
-            stats.baseAttributes.STR += amount; 
-            stats.attributes.STR += amount; 
-            message = `Strength Increased`;
-        }
-        
-        // Recalculate stats only if successful and it was a player
-        let newStats = stats;
-        if (entity.type === 'PLAYER') {
-             newStats = get().recalculateStats({ ...entity, stats });
-        }
-        
-        return { stats: newStats, amount, message, isSuccess };
-    };
+    // Find the Entity (Battle or Party)
+    let entity: any = null;
+    let isBattleEntity = false;
 
     if (state.gameState === GameState.BATTLE_TACTICAL) {
-        const ent = state.battleEntities.find(e => e.id === targetId);
-        if (ent) {
-            const { stats, message, isSuccess } = applyEffect(ent);
-            const newEntities = state.battleEntities.map(e => e.id === targetId ? { ...e, stats } : e);
-            
-            const color = !isSuccess ? '#94a3b8' : (item.id === 'sacred_elixir' && stats.creatureType === CreatureType.UNDEAD ? '#fbbf24' : '#22c55e');
-            
-            const popups = [...state.damagePopups, { 
+        entity = state.battleEntities.find(e => e.id === targetId);
+        isBattleEntity = true;
+    } else {
+        entity = state.party.find(p => p.id === targetId);
+    }
+
+    if (!entity) return;
+
+    // --- EXECUTE STRATEGY ---
+    const strategy = resolveStrategy(item);
+    
+    if (!strategy) {
+        get().addLog("Cannot use this item directly.", "info");
+        return;
+    }
+
+    sfx.playMagic(); 
+    
+    const result = strategy({ 
+        item, 
+        stats: entity.stats, 
+        log: get().addLog 
+    });
+
+    if (!result.success) {
+        get().addLog(`${entity.name}: ${result.message}`, "info");
+        if (isBattleEntity) {
+             const popups = [...state.damagePopups, { 
                 id: generateId(), 
-                position: [ent.position.x, 0, ent.position.y], 
-                amount: message, 
-                color: color, 
+                position: [entity.position.x, 0, entity.position.y], 
+                amount: result.message, 
+                color: result.popupColor || '#94a3b8', 
                 isCrit: false, 
                 timestamp: Date.now() 
             }];
-            
-            set({ battleEntities: newEntities, hasActed: true, isInventoryOpen: false, damagePopups: popups });
+            set({ damagePopups: popups });
         }
-    } else {
-        const newParty = state.party.map(p => { 
-            if (p.id === targetId) { 
-                const { stats, message, isSuccess } = applyEffect(p); 
-                if (isSuccess) get().addLog(`${p.name} used ${item.name}. (${message})`, "roll"); 
-                else get().addLog(`${p.name} used ${item.name} but it had no effect.`, "info");
-                return { ...p, stats }; 
-            } 
-            return p; 
-        });
-        set({ party: newParty });
+        return; 
     }
-    const newInventory = [...state.inventory];
-    if (newInventory[slotIndex].quantity > 1) newInventory[slotIndex].quantity--; else newInventory.splice(slotIndex, 1);
-    set({ inventory: newInventory });
+
+    // --- UPDATE STATE ---
+    // Recalculate stats wrapper to ensure derived values (like maxHP modifiers) are consistent
+    // Note: We need to pass the full entity structure to recalculateStats
+    const tempEntity = { ...entity, stats: result.newStats };
+    const finalStats = get().recalculateStats(tempEntity);
+    
+    // Ensure HP cap check post-recalculation
+    finalStats.hp = Math.min(finalStats.hp, finalStats.maxHp); 
+
+    if (isBattleEntity) {
+        const newEntities = state.battleEntities.map(e => e.id === targetId ? { ...e, stats: finalStats } : e);
+        const popups = [...state.damagePopups, { 
+            id: generateId(), 
+            position: [entity.position.x, 0, entity.position.y], 
+            amount: result.message, 
+            color: result.popupColor || '#22c55e', 
+            isCrit: false, 
+            timestamp: Date.now() 
+        }];
+        
+        set({ 
+            battleEntities: newEntities, 
+            hasActed: true, 
+            isInventoryOpen: false, 
+            damagePopups: popups 
+        });
+    } else {
+        const newParty = state.party.map(p => p.id === targetId ? { ...p, stats: finalStats } : p);
+        set({ party: newParty });
+        get().addLog(`${entity.name} used ${item.name}. ${result.message}`, "roll");
+    }
+
+    // --- CONSUME ITEM ---
+    if (result.shouldConsume) {
+        const newInventory = [...state.inventory];
+        if (newInventory[slotIndex].quantity > 1) {
+            newInventory[slotIndex].quantity--;
+        } else {
+            newInventory.splice(slotIndex, 1);
+        }
+        set({ inventory: newInventory });
+    }
   },
 
   equipItem: (itemId, characterId) => {

@@ -6,7 +6,9 @@ import { BattleScene } from './components/BattleScene';
 import { TitleScreen } from './components/CharacterCreation';
 import { UIOverlay } from './components/UIOverlay';
 import { BattleResultModal } from './components/BattleResultModal';
+import { EndingScreen } from './components/EndingScreen';
 import { useGameStore } from './store/gameStore';
+import { useContentStore } from './store/contentStore'; 
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { TownServicesManager } from './components/TownServices';
 import { InspectionPanel } from './components/InspectionPanel';
@@ -17,6 +19,7 @@ import { PartyManager } from './components/PartyManager';
 import { getReachableTiles } from './services/pathfinding';
 import { getAttackRange } from './services/dndRules';
 import { sfx } from './services/SoundSystem';
+import { getSupabase } from './services/supabaseClient';
 
 // Atomic Selector to prevent re-renders
 const useGameState = () => useGameStore(state => state.gameState);
@@ -50,13 +53,13 @@ const useGameActions = () => useGameStore(state => ({
     quitToMenu: state.quitToMenu,
     hasLineOfSight: state.hasLineOfSight,
     toggleInventory: state.toggleInventory,
-    toggleMap: state.toggleMap
+    toggleMap: state.toggleMap,
+    setUserSession: state.setUserSession
 }));
 
 const App = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTownService, setActiveTownService] = useState<'NONE' | 'SHOP' | 'INN'>('NONE');
-  const [showSystemMenu, setShowSystemMenu] = useState(false);
   
   // Use atomic selectors
   const gameState = useGameState();
@@ -68,8 +71,11 @@ const App = () => {
 
   const {
     initializeWorld, createCharacter, movePlayerOverworld, handleTileInteraction, 
-    continueAfterVictory, restartBattle, quitToMenu, hasLineOfSight, toggleInventory, toggleMap
+    continueAfterVictory, restartBattle, quitToMenu, hasLineOfSight, toggleInventory, toggleMap, setUserSession
   } = useGameActions();
+
+  // Content Store Actions
+  const { fetchContentFromCloud } = useContentStore();
 
   // Routing Check
   useEffect(() => {
@@ -78,12 +84,30 @@ const App = () => {
       }
   }, []);
 
-  // Initialize World
+  // Initialize World & Auth & Content
   useEffect(() => {
       if (!isAdmin) {
           initializeWorld();
+          // Attempt to load dynamic content from Supabase
+          fetchContentFromCloud().catch(err => console.warn("Live Ops: Running in offline mode", err));
       }
-  }, [isAdmin, initializeWorld]);
+
+      // Supabase Auth Listener
+      const supabase = getSupabase();
+      if (supabase) {
+          // Check initial session
+          supabase.auth.getSession().then(({ data: { session } }) => {
+              setUserSession(session);
+          });
+
+          // Listen for changes (Login, Logout, Auto-refresh)
+          const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+              setUserSession(session);
+          });
+
+          return () => subscription.unsubscribe();
+      }
+  }, [isAdmin, initializeWorld, setUserSession, fetchContentFromCloud]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -103,11 +127,6 @@ const App = () => {
               else if (isMapOpen) toggleMap();
               else if (activeTownService !== 'NONE') setActiveTownService('NONE');
               else if (inspectedEntityId) useGameStore.getState().closeInspection();
-              else {
-                  // If we were using this state locally in UIOverlay, we can't toggle it easily here without moving state up.
-                  // For now, Escape closes windows. System menu toggle is handled inside UIOverlay or we assume it's open there.
-                  // Actually, let's just close things.
-              }
           }
       };
 
@@ -188,6 +207,7 @@ const App = () => {
     <>
       {gameState === GameState.TITLE && <TitleScreen onComplete={createCharacter} />}
       {gameState === GameState.CHARACTER_CREATION && <TitleScreen onComplete={createCharacter} />}
+      {gameState === GameState.GAME_WON && <EndingScreen />}
       
       {(gameState === GameState.OVERWORLD || gameState === GameState.TOWN_EXPLORATION) && (
         <OverworldMap 

@@ -2,10 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import { GameState, BattleAction, EquipmentSlot, Dimension } from '../types';
 import { useGameStore } from '../store/gameStore';
+import { useContentStore } from '../store/contentStore';
 import { InventoryScreen } from './InventoryScreen';
 import { WorldMapScreen } from './WorldMapScreen';
 import { SaveLoadModal } from './SaveLoadModal';
-import { SPELLS as SPELL_DB, CLASS_CONFIG, ClassArchetype, SKILLS as SKILLS_DB, RACE_SKILLS as RACE_SKILLS_DB, ITEMS } from '../constants';
+import { CLASS_CONFIG, ClassArchetype, RACE_SKILLS as RACE_SKILLS_DB, ITEMS } from '../constants';
 import { sfx } from '../services/SoundSystem';
 
 interface UIOverlayProps {
@@ -14,6 +15,55 @@ interface UIOverlayProps {
 
 // Helper for consistent Hexagon Clipping (Flat-topped for grid alignment)
 const HEX_CLIP = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)";
+
+const QuestTracker = () => {
+    const { quests, exploredTiles } = useGameStore();
+    const [isExpanded, setIsExpanded] = useState(true);
+    const activeQuests = quests.filter(q => !q.completed);
+
+    if (activeQuests.length === 0) return null;
+
+    // Helper to calculate progress text
+    const getProgress = (id: string) => {
+        if (id === 'q2') { // Explore quest
+            const total = (exploredTiles[Dimension.NORMAL]?.size || 0) + (exploredTiles[Dimension.UPSIDE_DOWN]?.size || 0);
+            return `${Math.min(50, total)}/50 Tiles`;
+        }
+        if (id === 'q1') {
+            return `Go to [0,0]`;
+        }
+        return '';
+    };
+
+    return (
+        <div className="absolute right-0 top-32 z-10 flex flex-col items-end pointer-events-auto transition-all duration-300">
+            <button 
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="bg-slate-900/80 text-amber-500 font-bold uppercase text-[10px] tracking-widest px-3 py-1 rounded-l-lg border-y border-l border-amber-600/30 hover:bg-slate-800 transition-colors shadow-lg"
+            >
+                {isExpanded ? 'Active Quests »' : '« Quests'}
+            </button>
+            
+            {isExpanded && (
+                <div className="bg-slate-900/90 border-l-2 border-amber-500/50 p-4 rounded-bl-xl shadow-xl w-56 backdrop-blur-sm animate-in slide-in-from-right-10 duration-300">
+                    <div className="space-y-3">
+                        {activeQuests.map(q => (
+                            <div key={q.id} className="group">
+                                <h4 className={`text-xs font-bold font-serif ${q.type === 'MAIN' ? 'text-amber-400' : 'text-slate-300'}`}>
+                                    {q.type === 'MAIN' && '★ '}{q.title}
+                                </h4>
+                                <p className="text-[10px] text-slate-400 leading-tight mt-0.5">{q.description}</p>
+                                <div className="text-[9px] text-slate-500 font-mono mt-1 text-right">
+                                    {getProgress(q.id)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export const UIOverlay: React.FC<UIOverlayProps> = ({ onOpenTownService }) => {
   const [showSystemMenu, setShowSystemMenu] = useState(false);
@@ -30,6 +80,9 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onOpenTownService }) => {
       battleEntities, selectAction, selectedAction, selectSpell, selectSkill, hasMoved, hasActed,
       gold, fatigue, worldTime, getItemCount, camp, nextTurn, attemptRun, currentRegionName
   } = useGameStore();
+
+  // Access Dynamic Content
+  const { spells: spellDB, skills: skillDB } = useContentStore();
 
   useEffect(() => {
       setShowSkillDrawer(null);
@@ -76,17 +129,17 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onOpenTownService }) => {
   const attackLabel = isRangedWeapon ? "Shoot" : "Strike";
   const attackIcon = isRangedWeapon ? "🏹" : "⚔️";
 
-  // DYNAMIC SPELLS based on Progression
+  // DYNAMIC SPELLS based on Progression & Dynamic Store
   const availableSpells = (isPlayerTurn && activeEntity?.stats.knownSpells) 
-    ? activeEntity.stats.knownSpells.map(id => SPELL_DB[id]).filter(Boolean) 
+    ? activeEntity.stats.knownSpells.map(id => spellDB[id]).filter(Boolean) 
     : [];
 
-  // DYNAMIC SKILLS based on Progression + Race
+  // DYNAMIC SKILLS based on Progression + Race & Dynamic Store
   const availableSkills = (isPlayerTurn && activeEntity?.stats)
     ? [
         ...(activeEntity.stats.knownSkills || []),
         ...(RACE_SKILLS_DB[activeEntity.stats.race!] || [])
-      ].map(id => SKILLS_DB[id]).filter(Boolean)
+      ].map(id => skillDB[id]).filter(Boolean)
     : [];
 
   const handleAction = (action: BattleAction) => {
@@ -321,6 +374,9 @@ export const UIOverlay: React.FC<UIOverlayProps> = ({ onOpenTownService }) => {
                     </div>
                 )}
             </div>
+
+            {/* QUEST TRACKER - OVERWORLD ONLY */}
+            {gameState === GameState.OVERWORLD && <QuestTracker />}
 
             {/* NOTIFICATIONS & INTERACTION STACK */}
             {/* Moved to top-center (below nav) and bottom-center (above controls) to clear center view */}

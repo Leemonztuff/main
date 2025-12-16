@@ -28,6 +28,70 @@ const MIGRATIONS: Record<number, (data: any) => any> = {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+// --- QUEST STRATEGY PATTERN ---
+
+interface QuestContext {
+    state: OverworldSlice & any; // Access full state
+    quest: Quest;
+    triggerChange: (msg: string, type: any) => void;
+}
+
+const QuestEvaluators: Record<string, (ctx: QuestContext) => Quest | null> = {
+    'vecna_1': ({ state, quest, triggerChange }) => {
+        // Condition: Visit [0,0] in Normal World
+        if (state.playerPos.x === 0 && state.playerPos.y === 0 && state.dimension === Dimension.NORMAL) {
+            triggerChange("Quest Completed: The Thinning Veil", "narrative");
+            triggerChange("You feel a cold breeze. A rift to the Shadow Realm must be nearby.", "narrative");
+            state.addGold(100);
+            sfx.playVictory();
+            return { ...quest, completed: true };
+        }
+        return null;
+    },
+    'vecna_2': ({ state, quest, triggerChange }) => {
+        // Condition: Enter Upside Down
+        if (state.dimension === Dimension.UPSIDE_DOWN) {
+            triggerChange("Quest Completed: Into the Abyss", "narrative");
+            triggerChange("The air tastes of ash. Vecna's influence is strong here.", "combat");
+            sfx.playVictory();
+            return { ...quest, completed: true };
+        }
+        return null;
+    },
+    'vecna_3': ({ state, quest }) => {
+        // Condition: Handled by Boss Kill Event usually, but we keep this stub for consistency
+        return null; 
+    }
+};
+
+const QuestChainLogic = (quests: Quest[], spawnBoss: () => void): Quest[] => {
+    const newQuests = [...quests];
+    const vecna1Done = quests.find(q => q.id === 'vecna_1')?.completed;
+    const vecna2Done = quests.find(q => q.id === 'vecna_2')?.completed;
+    
+    if (vecna1Done && !quests.find(q => q.id === 'vecna_2')) {
+        newQuests.push({
+            id: 'vecna_2',
+            title: 'Into the Abyss',
+            description: 'Find a Portal and enter the Shadow Realm (Upside Down).',
+            type: 'MAIN',
+            completed: false
+        });
+    }
+
+    if (vecna2Done && !quests.find(q => q.id === 'vecna_3')) {
+        newQuests.push({
+            id: 'vecna_3',
+            title: 'The Lich Lord',
+            description: 'Travel to the Shadow Keep at [0,0] in the Upside Down and defeat the Avatar of Vecna.',
+            type: 'MAIN',
+            completed: false
+        });
+        spawnBoss();
+    }
+    return newQuests;
+};
+
 export interface OverworldSlice {
   gameState: GameState;
   dimension: Dimension;
@@ -69,6 +133,9 @@ export interface OverworldSlice {
   camp: () => void;
   setUserSession: (session: any) => void;
   logout: () => Promise<void>;
+  
+  checkQuestProgress: () => void;
+  spawnBoss: () => void;
 }
 
 const generateTownMap = (): HexCell[] => {
@@ -162,8 +229,58 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
       set(state => ({ isMapOpen: !state.isMapOpen, isInventoryOpen: false })); 
   },
 
+  checkQuestProgress: () => {
+      const { quests } = get();
+      let updatedQuests = [...quests];
+      let changed = false;
+
+      updatedQuests = updatedQuests.map(q => {
+          if (q.completed) return q;
+          
+          const evaluator = QuestEvaluators[q.id];
+          if (evaluator) {
+              const result = evaluator({
+                  state: get(),
+                  quest: q,
+                  triggerChange: get().addLog
+              });
+              if (result) {
+                  changed = true;
+                  return result;
+              }
+          }
+          return q;
+      });
+
+      if (changed) {
+          // Process Quest Chain Logic
+          const chainedQuests = QuestChainLogic(updatedQuests, get().spawnBoss);
+          set({ quests: chainedQuests });
+      }
+  },
+
+  spawnBoss: () => {
+      const { activeOverworldEnemies } = get();
+      const existingBoss = activeOverworldEnemies.find(e => e.defId === 'lich_lord');
+      if (existingBoss) return;
+
+      const boss: OverworldEntity = {
+          id: 'boss_vecna_avatar',
+          defId: 'lich_lord',
+          name: 'Avatar of Vecna',
+          sprite: ITEMS.SHARD_OF_VECNA.icon, 
+          dimension: Dimension.UPSIDE_DOWN,
+          q: 0,
+          r: 0,
+          visionRange: 10
+      };
+      
+      set({ activeOverworldEnemies: [...activeOverworldEnemies, boss] });
+      get().addLog("A dark presence has manifested in the Shadow Realm...", "combat");
+  },
+
   movePlayerOverworld: async (q, r) => {
-        const { isPlayerMoving, playerPos, dimension, gameState, townMapData, activeOverworldEnemies, party, clearedEncounters, exploredTiles, gracePeriodEndTime, fatigue, worldTime, currentRegionName } = get();
+        const { isPlayerMoving, playerPos, dimension, gameState, townMapData, activeOverworldEnemies, party, clearedEncounters, exploredTiles, gracePeriodEndTime, fatigue, worldTime, currentRegionName, quests } = get();
         
         const currentKey = `${q},${r}`;
         const isAlreadyThere = playerPos.x === q && playerPos.y === r;
@@ -222,11 +339,10 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
                 currentFatigue = 100;
             }
             
-            // Check for Region Change (UI Update)
             if (stepCell.regionName && stepCell.regionName !== currentRegionName && get().gameState === GameState.OVERWORLD) {
                 set({ currentRegionName: stepCell.regionName });
                 get().addLog(`Entered ${stepCell.regionName}`, "narrative");
-                sfx.playMagic(); // Subtle cue
+                sfx.playMagic(); 
             }
 
             set({ fatigue: currentFatigue, worldTime: currentTime });
@@ -238,6 +354,19 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
                 }));
                 set({ party: exhaustedParty });
                 if (Math.random() > 0.8) sfx.playHit();
+            }
+
+            // CHECK BOSS ENCOUNTER (SCRIPTED)
+            const quest3Active = quests.find(qu => qu.id === 'vecna_3' && !qu.completed);
+            if (dimension === Dimension.UPSIDE_DOWN && stepCell.q === 0 && stepCell.r === 0 && quest3Active) {
+                // Ensure boss is spawned just in case
+                get().spawnBoss();
+                // Force start battle with Lich Lord
+                get().addLog("You confront the Avatar of Vecna!", "combat");
+                // Find the boss entity created by spawnBoss
+                const bossEnt = get().activeOverworldEnemies.find(e => e.defId === 'lich_lord');
+                get().startBattle(TerrainType.LAVA, WeatherType.ASH, bossEnt?.id); // Lava arena
+                break;
             }
 
             if (!isGracePeriod) {
@@ -296,6 +425,11 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
                     standingOnSettlement: false,
                     standingOnTemple: false
                 });
+            }
+
+            // TRIGGER QUEST CHECK
+            if (get().gameState === GameState.OVERWORLD) {
+                get().checkQuestProgress();
             }
 
             if (stepCell.hasPortal && get().gameState === GameState.OVERWORLD) { sfx.playMagic(); break; }
@@ -423,6 +557,8 @@ export const createOverworldSlice: StateCreator<any, [], [], OverworldSlice> = (
             dimension: targetDimension, 
             exploredTiles: { ...exploredTiles, [targetDimension]: newExploredSet }
         });
+        // Check quest immediately upon warp
+        get().checkQuestProgress();
   },
 
   getSaveSlots: async () => {

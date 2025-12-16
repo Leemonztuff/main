@@ -18,6 +18,7 @@ const SpriteComponent = React.memo(({ url, isMoving, facingRight, actionType, is
         }
     }
     
+    // Attempt to load texture; if fails, error boundary will catch higher up, OR we use a fallback geometry in parent
     const texture = useTexture(safeUrl);
     
     useLayoutEffect(() => {
@@ -62,6 +63,23 @@ const SpriteComponent = React.memo(({ url, isMoving, facingRight, actionType, is
     )
 });
 
+// Fallback Geometry Component in case Sprite fails
+const FallbackGeometry = ({ color, isMoving }: { color: string, isMoving: boolean }) => {
+    const meshRef = useRef<THREE.Mesh>(null);
+    useFrame((state) => {
+        if (meshRef.current && isMoving) {
+            meshRef.current.position.y = 0.75 + Math.abs(Math.sin(state.clock.elapsedTime * 15)) * 0.1;
+        }
+    });
+    
+    return (
+        <mesh ref={meshRef} position={[0, 0.75, 0]} castShadow receiveShadow>
+            <capsuleGeometry args={[0.3, 0.8, 4, 8]} />
+            <meshStandardMaterial color={color} roughness={0.3} metalness={0.1} />
+        </mesh>
+    );
+};
+
 export const BillboardUnit = React.memo(({ 
     position, color, spriteUrl, isCurrentTurn, hp, maxHp, 
     onUnitClick, onUnitRightClick, isActing, actionType, 
@@ -74,6 +92,7 @@ export const BillboardUnit = React.memo(({
   const [isMoving, setIsMoving] = useState(false);
   const [facingRight, setFacingRight] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
+  const [textureError, setTextureError] = useState(false);
 
   // Derive class theme
   const classConfig = characterClass ? CLASS_CONFIG[characterClass as CharacterClass] : null;
@@ -191,18 +210,26 @@ export const BillboardUnit = React.memo(({
             </Billboard>
         </group>
 
-        {/* SPRITE */}
+        {/* SPRITE or FALLBACK */}
         <Billboard follow={true} lockX={false} lockY={false} lockZ={false}>
             <group onClick={handleClick}>
-                <SpriteComponent 
-                    url={spriteUrl} 
-                    isMoving={isMoving} 
-                    facingRight={facingRight} 
-                    isActing={isActing} 
-                    actionType={actionType}
-                    opacity={finalOpacity}
-                    colorTint={finalTint}
-                />
+                {!textureError ? (
+                    <ErrorBoundary fallback={
+                        <FallbackGeometry color={themeColor} isMoving={isMoving} />
+                    }>
+                        <SpriteComponent 
+                            url={spriteUrl} 
+                            isMoving={isMoving} 
+                            facingRight={facingRight} 
+                            isActing={isActing} 
+                            actionType={actionType}
+                            opacity={finalOpacity}
+                            colorTint={finalTint}
+                        />
+                    </ErrorBoundary>
+                ) : (
+                    <FallbackGeometry color={themeColor} isMoving={isMoving} />
+                )}
             </group>
         </Billboard>
         
@@ -244,3 +271,17 @@ export const BillboardUnit = React.memo(({
     </group>
   );
 });
+
+class ErrorBoundary extends React.Component<{ fallback: React.ReactNode, children?: React.ReactNode }, { hasError: boolean }> {
+    readonly props: Readonly<{ fallback: React.ReactNode, children?: React.ReactNode }>;
+    state = { hasError: false };
+    
+    constructor(props: { fallback: React.ReactNode, children?: React.ReactNode }) {
+        super(props);
+        this.props = props;
+        this.state = { hasError: false };
+    }
+
+    static getDerivedStateFromError() { return { hasError: true }; }
+    render() { return this.state.hasError ? this.props.fallback : this.props.children; }
+}

@@ -125,7 +125,7 @@ export const InventoryScreen: React.FC = () => {
     const { 
         inventory, party, activeInventoryCharacterId, 
         toggleInventory, consumeItem, equipItem, unequipItem, 
-        cycleInventoryCharacter, hasActed, gameState 
+        cycleInventoryCharacter, hasActed, gameState, gold
     } = useGameStore();
     
     const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
@@ -268,7 +268,14 @@ export const InventoryScreen: React.FC = () => {
                     
                     {/* Equipment Slots */}
                     <div className="p-6 bg-slate-950 border-b border-slate-800">
-                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Equipped Gear</h3>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Equipped Gear</h3>
+                            {/* Gold Display */}
+                            <div className="flex items-center gap-2 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
+                                <span className="text-lg">🪙</span>
+                                <span className="text-amber-400 font-bold font-mono">{gold}</span>
+                            </div>
+                        </div>
                         <div className="flex justify-center gap-6">
                             {[EquipmentSlot.MAIN_HAND, EquipmentSlot.BODY, EquipmentSlot.OFF_HAND].map(slot => {
                                 const item = activeChar.equipment[slot];
